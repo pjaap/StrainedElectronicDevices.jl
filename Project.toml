@@ -1,0 +1,34 @@
+name = "StrainedElectronicDevices"
+uuid = "b216b5de-52e9-47ff-b90b-2c83c7be6265"
+version = "1.0.0"
+authors = ["Patrick Jaap <patrick.jaap@wias-berlin.de>"]
+
+[deps]
+ExtendableFEM = "a722555e-65e0-4074-a036-ca7ce79a4aed"
+ExtendableGrids = "cfc395e8-590f-11e8-1f13-43a2532b2fa8"
+ForwardDiff = "f6369f11-7733-5829-9624-2563aa707210"
+LinearAlgebra = "37e2e46d-f89d-539d-b4ee-838fcccc9c8e"
+SimplexGridFactory = "57bfcd06-606e-45d6-baf4-4ba06da0efd5"
+StaticArrays = "90137ffa-7385-5640-81b9-e52037218182"
+TetGen = "c5d3f3f7-f850-59f6-8a2e-ffc6dc1317ea"
+
+[compat]
+Aqua = "0.8.14"
+ExplicitImports = "1.15.0"
+ExtendableFEM = "1.8.0"
+ExtendableGrids = "1.15.0"
+ForwardDiff = "1.3.1"
+LinearAlgebra = "1.10"
+SimplexGridFactory = "2.6.1"
+StaticArrays = "1.9.16"
+Test = "1.10"
+TetGen = "2.0.1"
+julia = "1.10"
+
+[extras]
+Aqua = "4c88cf16-eb10-579e-8560-4a9242c79595"
+ExplicitImports = "7d51a73a-1435-4ff3-83d9-f097790105c7"
+Test = "8dfed614-e22c-5e08-85e1-65c5234f0b40"
+
+[targets]
+test = ["Aqua", "ExplicitImports", "Test"]

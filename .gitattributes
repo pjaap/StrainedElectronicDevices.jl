@@ -1,0 +1,2 @@
+src/grids/qubus_one_contact_fine.jld2 filter=lfs diff=lfs merge=lfs -text
+src/grids/qubus_one_contact_coarse.jld2 filter=lfs diff=lfs merge=lfs -text
