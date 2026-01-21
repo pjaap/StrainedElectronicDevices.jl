@@ -2,7 +2,8 @@ module StrainedElectronicDevices
 
 using ExtendableFEM: ExtendableFEM, BilinearOperator, LinearOperator,
     ProblemDescription, TDVector, Unknown, assign_operator!,
-    assign_unknown!, tensor_view, εV
+    assign_unknown!, tensor_view, εV, assign_restriction!, BoundaryDataRestriction,
+    CoupledDofsRestriction
 using ExtendableGrids: ExtendableGrid, num_cellregions, dim_space
 import ForwardDiff
 using LinearAlgebra: mul!
@@ -12,8 +13,8 @@ using SimplexGridFactory: SimplexGridFactory, SimplexGridBuilder, cellregion!,
 using TetGen: TetGen
 
 
-gridsdir(args...) = joinpath(pkgdir(QuantumDevice), "src", "grids", args...)
-scriptsdir(args...) = joinpath(pkgdir(QuantumDevice), "scripts", args...)
+gridsdir(args...) = joinpath(pkgdir(StrainedElectronicDevices), "src", "grids", args...)
+scriptsdir(args...) = joinpath(pkgdir(StrainedElectronicDevices), "scripts", args...)
 
 
 include("materials/materials.jl")

@@ -1,6 +1,6 @@
-struct Device
+struct Device{Tc, Ti}
 
-    grid::ExtendableGrid
+    grid::ExtendableGrid{Tc, Ti}
 
     pre_stress::Vector{SVector{6}}
 
@@ -34,20 +34,19 @@ end
     Note: if both pre_strain and pre_stress are given on the same cell region, only the pre_stress is considered.
 """
 function Device(
-        grid::ExtendableGrid,
+        grid::ExtendableGrid{Tc, Ti},
         materials::Vector{<:AbstractMaterial};
         thermal_strain = [],
         pre_stress = [],
         pre_strain = [],
         lattice_mismatch = []
-    )
+    ) where {Tc, Ti}
 
     cell_regions = num_cellregions(grid)
     dim = dim_space(grid)
 
-    @assert dim in [2, 3]
-
-    dim_Voigt = dim == 2 ? 3 : 6
+    @assert dim == 3
+    dim_Voigt = 6
 
     # prepare physical properties for each cell region
     ps = [ @SArray zeros(dim_Voigt) for i in 1:cell_regions ]
@@ -72,5 +71,5 @@ function Device(
         ps[k] += mt[k] * v
     end
 
-    return Device(grid, ps, mt)
+    return Device{Tc, Ti}(grid, ps, mt)
 end
