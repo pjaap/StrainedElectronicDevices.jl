@@ -10,6 +10,7 @@ struct NoMaterial <: AbstractMaterial
     C::SMatrix{6, 6}
 end
 NoMaterial() = NoMaterial(@SArray zeros(6, 6))
+const no_material = NoMaterial()
 
 """
     material_vector(n::Int)
@@ -19,7 +20,7 @@ NoMaterial() = NoMaterial(@SArray zeros(6, 6))
 """
 function material_vector(n::Int)
     result = Vector{AbstractMaterial}(undef, n)
-    fill!(result, NoMaterial())
+    fill!(result, no_material)
     return result
 end
 

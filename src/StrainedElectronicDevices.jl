@@ -18,7 +18,7 @@ scriptsdir(args...) = joinpath(pkgdir(StrainedElectronicDevices), "scripts", arg
 
 
 include("materials/materials.jl")
-export AbstractMaterial, NoMaterial, material_vector
+export AbstractMaterial, NoMaterial, material_vector, no_material
 
 # materials
 include("materials/Al.jl")

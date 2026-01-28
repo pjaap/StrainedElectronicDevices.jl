@@ -7,11 +7,15 @@ using ExtendableFEM
 using ExtendableGrids
 using GridVisualize
 using JLD2: load, save
+using LinearAlgebra: I, Diagonal
 # using PythonCall
 
 # the default linear solver
 using Pardiso
-using LinearSolve: PardisoJL
+using Krylov
+using LinearSolve: PardisoJL, KrylovJL_GMRES
+
+using ILUZero: ILU0Precon
 
 const dim = 3
 
@@ -19,14 +23,33 @@ const dim = 3
 const cell_region_Si = 1
 const cell_region_SiGe = 2
 const cell_region_SiO₂ = 3
-const cell_region_TiN = 4
+const cell_region_TiN_side1 = 11 # side gates
+const cell_region_TiN_side2 = 12
+const cell_region_TiN_clav1 = 13 # clavier gates
+const cell_region_TiN_clav2 = 14
+const cell_region_TiN_clav3 = 15
+const cell_region_TiN_clav4 = 16
+
+# collect the TiN clavier regions
+const cell_regions_TiN_clav = [
+    cell_region_TiN_clav1,
+    cell_region_TiN_clav2,
+    cell_region_TiN_clav3,
+    cell_region_TiN_clav4,
+]
+
+# collect the TiN side regions
+const cell_regions_TiN_side = [
+    cell_region_TiN_side1,
+    cell_region_TiN_side2,
+]
 
 # boundary region assignments
 const boundary_region_left = 2
 const boundary_region_right = 3
 const boundary_region_bottom = 4
 
-function process_grid(xgrid)
+function process_grid!(xgrid)
 
     # post-process the boundary regions: define "left", "right" and "bottom" region
     grid_x_range = @views extrema(xgrid[Coordinates][1, :])
@@ -64,7 +87,7 @@ function process_grid(xgrid)
         boundary_region_bottom
     )
 
-    return xgrid
+    return nothing
 end
 
 
@@ -73,25 +96,24 @@ function simulate(;
         TiN_mode = :A, # choose :A or :B
         grid_variant = :coarse, # choose :coarse or :fine
         σ_0 = -2.6,
-        periodic = true,
-        kwargs...
+        periodic = true
     )
 
-    materials = material_vector(4)
+    materials = material_vector(16)
     materials[cell_region_Si] = Si()
     materials[cell_region_SiGe] = SiGe(0.34)
     materials[cell_region_SiO₂] = SiO₂()
-    materials[cell_region_TiN] = TiN(TiN_mode)
 
-    # unit matrix in Voigt notation
-    Iᵥ = @SArray [1.0, 1.0, 1.0, 0.0, 0.0, 0.0]
+    for cell_region in vcat(cell_regions_TiN_clav, cell_regions_TiN_side)
+        materials[cell_region] = TiN(TiN_mode)
+    end
 
     # in-plane (x-y) stress unit matrix in Voigt notation
-    Jᵥ = @SArray [1.0, 1.0, 1.0, 0.0, 0.0, 0.0]
+    Jᵥ = @SArray [1.0, 1.0, 0.0, 0.0, 0.0, 0.0]
 
     # external pre-stress at the TiN claviers
     pre_stress = [
-        cell_region_TiN => σ_0 * Iᵥ,
+        cell_region => σ_0 * Jᵥ for cell_region in cell_regions_TiN_clav
     ]
 
     ## read the grid from a file
@@ -99,10 +121,12 @@ function simulate(;
     @info "grid loaded"
 
     # process the grid (add additional boundary regions)
-    xgrid = process_grid(xgrid)
+    process_grid!(xgrid)
 
     # lift the grid coordinates to nm (otherwise the cell volumes become to numerically zero)
-    xgrid[Coordinates] *= 1.0e6
+    # and remove cached values from the grid (void losing integrity of the grid)
+    xgrid[Coordinates] *= 1.0e9
+    trim!(xgrid)
 
     # create the electronic device
     device = Device(xgrid, materials; pre_stress)
@@ -137,12 +161,12 @@ function plot(
 
     ## displacement is the first component of the solution
     displacement = sol.tags[1]
-    xgrid = sol[displacement].FES.xgrid
-    @showtime xgrid = explode(xgrid)
 
+    # the grid with all adjacencies removed (for discontinuous plotting)
+    xgrid = explode(sol[displacement].FES.xgrid)
 
     # extract pre-strains (from pre-stress)
-    pre_strain = [ material_tensor \ pre_stress for (material_tensor, pre_stress) in zip(device.material_tensors, device.pre_stress) ]
+    pre_strain = [ (pre_stress == zeros(6) ? pre_stress : material_tensor \ pre_stress) for (material_tensor, pre_stress) in zip(device.material_tensors, device.pre_stress) ]
 
     # create a strain FE function
     FES_strain = FESpace{H1P1(6)}(xgrid)
@@ -161,14 +185,12 @@ function plot(
     displacement_func = FEVector(FES_displacement)
     lazy_interpolate!(displacement_func[1], sol, use_cellparents = true)
 
-    strain_values = nodevalues(strain_func[1])
-    displacement_values = nodevalues(displacement_func[1])
-
+    # export the nodevalues to VTK
     writeVTK(
         "QuantumBusResult.vtu",
         xgrid;
-        :displacement => displacement_values,
-        :strain => strain_values,
+        :displacement => nodevalues(displacement_func[1]),
+        :strain => nodevalues(strain_func[1]),
     )
 
     gridplot(xgrid; Plotter, yplanes = [0.00000039], scene3d = :LScene)
