@@ -13,7 +13,9 @@ using LinearAlgebra: I, Diagonal
 # the default linear solver
 using Pardiso
 using Krylov
+using AMGCLWrap: AMGSolverAlgorithm, AMGPrecon
 using LinearSolve: PardisoJL, KrylovJL_GMRES
+
 
 using ILUZero: ILU0Precon
 
@@ -45,9 +47,9 @@ const cell_regions_TiN_side = [
 ]
 
 # boundary region assignments
-const boundary_region_left = 2
-const boundary_region_right = 3
-const boundary_region_bottom = 4
+const boundary_region_left = 11
+const boundary_region_right = 12
+const boundary_region_bottom = 13
 
 function process_grid!(xgrid)
 
@@ -92,10 +94,11 @@ end
 
 
 function simulate(;
-        linear_solver = PardisoJL,
+        linear_solver = KrylovJL_GMRES(rtol = 1.0e-15, verbose = 10, precs = (A, p) -> (AMGPrecon(A), I)),
         TiN_mode = :A, # choose :A or :B
         grid_variant = :coarse, # choose :coarse or :fine
         σ_0 = -2.6,
+        Plotter = nothing,
         periodic = true
     )
 
@@ -189,6 +192,7 @@ function plot(
     writeVTK(
         "QuantumBusResult.vtu",
         xgrid;
+        compress = true,
         :displacement => nodevalues(displacement_func[1]),
         :strain => nodevalues(strain_func[1]),
     )
