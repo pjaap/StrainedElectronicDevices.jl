@@ -5,9 +5,11 @@ using StrainedElectronicDevices
 using StaticArrays
 using ExtendableFEM
 using ExtendableGrids
+using ExtendableSparse
 using GridVisualize
 using JLD2: load, save
-using LinearAlgebra: I, Diagonal
+using LinearAlgebra: I, Diagonal, lu
+using SparseArrays: sparse
 # using PythonCall
 
 # the default linear solver
@@ -17,7 +19,7 @@ using AMGCLWrap: AMGSolverAlgorithm, AMGPrecon
 using LinearSolve: PardisoJL, KrylovJL_GMRES
 
 
-using ILUZero: ILU0Precon
+using ILUZero: ilu0
 
 const dim = 3
 
@@ -94,7 +96,6 @@ end
 
 
 function simulate(;
-        linear_solver = KrylovJL_GMRES(rtol = 1.0e-15, verbose = 10, precs = (A, p) -> (AMGPrecon(A), I)),
         TiN_mode = :A, # choose :A or :B
         grid_variant = :coarse, # choose :coarse or :fine
         σ_0 = -2.6,
@@ -151,11 +152,13 @@ function simulate(;
         error("supported FE orders are 1 and 2.")
     end
 
+    SCPC = SchurComplementPreconBuilder(FES.ndofs, ilu0)
+
     #solve
     sol = ExtendableFEM.solve(
         elasticity_problem,
         FES;
-        method_linear = linear_solver
+        method_linear = KrylovJL_GMRES(rtol = 1.0e-15, verbose = 10, precs = (A, p) -> (SCPC(A, p), I))
     )
 
     return sol, device
