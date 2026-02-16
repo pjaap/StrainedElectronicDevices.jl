@@ -99,7 +99,8 @@ function simulate(;
         grid_variant = :coarse, # choose :coarse or :fine
         σ_0 = -2.6,
         Plotter = nothing,
-        periodic = true
+        periodic = true,
+        order = 1,
     )
 
     materials = material_vector(16)
@@ -142,7 +143,13 @@ function simulate(;
     )
 
     # second order finite element space
-    FES = FESpace{H1P2{3, 3}}(xgrid)
+    if order == 1
+        FES = FESpace{H1P1{3}}(xgrid) # only for local testing
+    elseif order == 2
+        FES = FESpace{H1P2{3, 3}}(xgrid)
+    else
+        error("supported FE orders are 1 and 2.")
+    end
 
     #solve
     sol = ExtendableFEM.solve(
