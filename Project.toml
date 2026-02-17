@@ -20,6 +20,10 @@ SimplexGridFactory = "57bfcd06-606e-45d6-baf4-4ba06da0efd5"
 StaticArrays = "90137ffa-7385-5640-81b9-e52037218182"
 TetGen = "c5d3f3f7-f850-59f6-8a2e-ffc6dc1317ea"
 
+[sources]
+ExtendableFEM = {rev = "fix/verbosity", url = "https://github.com/WIAS-PDELib/ExtendableFEM.jl"}
+ExtendableSparse = {rev = "feature/Schurcomplement_precon", url = "https://github.com/WIAS-PDELib/ExtendableSparse.jl"}
+
 [compat]
 AMGCLWrap = "2.1.0"
 Aqua = "0.8.14"

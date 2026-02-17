@@ -16,7 +16,7 @@ using SparseArrays: sparse
 using Pardiso
 using Krylov
 using AMGCLWrap: AMGSolverAlgorithm, AMGPrecon
-using LinearSolve: PardisoJL, KrylovJL_GMRES
+using LinearSolve: PardisoJL, KrylovJL_GMRES, KrylovJL_CG, KrylovJL_MINRES
 
 
 using ILUZero: ilu0
@@ -158,7 +158,8 @@ function simulate(;
     sol = ExtendableFEM.solve(
         elasticity_problem,
         FES;
-        method_linear = KrylovJL_GMRES(rtol = 1.0e-15, verbose = 10, precs = (A, p) -> (SCPC(A, p), I))
+        verbosity = 2,
+        method_linear = KrylovJL_GMRES(rtol = 1.0e-15, verbose = 10, precs = (A, p) -> (SCPC(A), I))
     )
 
     return sol, device
