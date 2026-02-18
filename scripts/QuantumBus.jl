@@ -8,7 +8,7 @@ using ExtendableGrids
 using ExtendableSparse
 using GridVisualize
 using JLD2: load, save
-using LinearAlgebra: I, Diagonal, lu
+using LinearAlgebra: I, Diagonal, lu, diag
 using SparseArrays: sparse
 using Metis
 # using PythonCall
@@ -155,7 +155,7 @@ function simulate(;
         error("supported FE orders are 1 and 2.")
     end
 
-    SCPC = SchurComplementPreconBuilder(FES.ndofs, ilu0, verbosity = 2)
+    SCPC = SchurComplementPreconBuilder(FES.ndofs, Diagonal ∘ Vector ∘ diag, verbosity = 2)
 
     #solve
     sol = ExtendableFEM.solve(
