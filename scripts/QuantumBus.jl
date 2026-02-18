@@ -159,7 +159,7 @@ function simulate(;
         elasticity_problem,
         FES;
         verbosity = 2,
-        method_linear = KrylovJL_GMRES(rtol = 1.0e-15, verbose = 10, precs = (A, p) -> (SCPC(A), I))
+        method_linear = KrylovJL_GMRES(rtol = 1.0e-15, verbose = 100, precs = (A, p) -> (SCPC(A), I))
     )
 
     return sol, device
