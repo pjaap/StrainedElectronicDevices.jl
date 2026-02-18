@@ -10,6 +10,7 @@ using GridVisualize
 using JLD2: load, save
 using LinearAlgebra: I, Diagonal, lu
 using SparseArrays: sparse
+using Metis
 # using PythonCall
 
 # the default linear solver
@@ -121,17 +122,19 @@ function simulate(;
         cell_region => σ_0 * Jᵥ for cell_region in cell_regions_TiN_clav
     ]
 
-    ## read the grid from a file
+    ## read the grid from a file and postprocess
     xgrid = load(StrainedElectronicDevices.gridsdir("qubus_one_contact_$(grid_variant).jld2"))["grid"]
-    @info "grid loaded"
-
-    # process the grid (add additional boundary regions)
     process_grid!(xgrid)
 
     # lift the grid coordinates to nm (otherwise the cell volumes become to numerically zero)
     # and remove cached values from the grid (void losing integrity of the grid)
     xgrid[Coordinates] *= 1.0e9
     trim!(xgrid)
+    @info "grid is ready"
+
+    npart = 4 * Threads.nthreads()
+    xgrid = partition(xgrid, PlainMetisPartitioning(; npart))
+    @info "done partitioning the grid into $npart parts"
 
     # create the electronic device
     device = Device(xgrid, materials; pre_stress)
@@ -152,12 +155,13 @@ function simulate(;
         error("supported FE orders are 1 and 2.")
     end
 
-    SCPC = SchurComplementPreconBuilder(FES.ndofs, ilu0)
+    SCPC = SchurComplementPreconBuilder(FES.ndofs, ilu0, verbosity = 2)
 
     #solve
     sol = ExtendableFEM.solve(
         elasticity_problem,
         FES;
+        parallel = true,
         verbosity = 2,
         method_linear = KrylovJL_GMRES(rtol = 1.0e-15, verbose = 100, precs = (A, p) -> (SCPC(A), I))
     )
