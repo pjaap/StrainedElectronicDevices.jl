@@ -132,9 +132,9 @@ function simulate(;
     trim!(xgrid)
     @info "grid is ready"
 
-    npart = 4 * Threads.nthreads()
+    npart = 8 * Threads.nthreads()
     xgrid = partition(xgrid, PlainMetisPartitioning(; npart))
-    @info "done partitioning the grid into $npart parts"
+    @info "done partitioning the grid into $npart parts with partitions per color = $(num_partitions_per_color(xgrid))"
 
     # create the electronic device
     device = Device(xgrid, materials; pre_stress)
