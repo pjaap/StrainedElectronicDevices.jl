@@ -132,7 +132,7 @@ function simulate(;
     trim!(xgrid)
     @info "grid is ready"
 
-    npart = 8 * Threads.nthreads()
+    npart = 9 * Threads.nthreads()
     xgrid = partition(xgrid, PlainMetisPartitioning(; npart))
     @info "done partitioning the grid into $npart parts with partitions per color = $(num_partitions_per_color(xgrid))"
 
@@ -155,18 +155,22 @@ function simulate(;
         error("supported FE orders are 1 and 2.")
     end
 
-    SCPC = SchurComplementPreconBuilder(FES.ndofs, Diagonal ∘ Vector ∘ diag, verbosity = 2)
+    dense_diag = Diagonal ∘ Vector ∘ diag
+    # LLDL(A) = lldl((A + A') / 2, memory = 100)
+    SCPC = FullSchurComplementPreconBuilder(FES.ndofs, ilu0, verbosity = 2)
+    # SCPC = SchurComplementPreconBuilder(FES.ndofs, LLDL, verbosity = 2)
 
     #solve
-    sol = ExtendableFEM.solve(
+    sol, SC = ExtendableFEM.solve(
         elasticity_problem,
         FES;
+        return_config = true,
         parallel = true,
         verbosity = 2,
-        method_linear = KrylovJL_GMRES(rtol = 1.0e-15, verbose = 100, precs = (A, p) -> (SCPC(A), I))
+        method_linear = KrylovJL_GMRES(rtol = 1.0e-15, verbose = 1, precs = (A, p) -> (SCPC(A), I))
     )
-
-    return sol, device
+    return SC
+    # return sol, device
 end
 
 
