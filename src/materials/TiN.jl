@@ -2,6 +2,7 @@ struct TiN <: AbstractMaterial
     name::String
     C::SMatrix{6, 6}
     CTE::Float64
+    ε_r::Float64 # this is only a dummy
 end
 
 
@@ -42,6 +43,12 @@ function TiN(model)
 
     CTE = 9.4 * 1.0e-6 # https://www.msesupplies.com/en-de/pages/list-of-thermal-expansion-coefficients-cte-for-natural-and-engineered-materials
 
-    return TiN("TiN Model $model", matrix, CTE)
+    return TiN(
+        "TiN Model $model",
+        matrix,
+        CTE,
+        1.0
+    )
+
 
 end

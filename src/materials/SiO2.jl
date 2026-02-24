@@ -1,6 +1,7 @@
 struct SiO₂ <: AbstractMaterial
     name::String
     C::SMatrix{6, 6}
+    ε_r::Float64
 end
 
 
@@ -32,7 +33,11 @@ function SiO₂()
         0   0   0   0   0   C44
     ]
 
-    return SiO₂("SiO₂", matrix)
+    return SiO₂(
+        "SiO₂",
+        matrix,
+        3.9
+    )
 end
 
 """

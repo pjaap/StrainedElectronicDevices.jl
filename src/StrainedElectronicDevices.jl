@@ -2,8 +2,8 @@ module StrainedElectronicDevices
 
 using ExtendableFEM: ExtendableFEM, BilinearOperator, LinearOperator,
     ProblemDescription, TDVector, Unknown, assign_operator!,
-    assign_unknown!, tensor_view, εV, assign_restriction!, BoundaryDataRestriction,
-    CoupledDofsRestriction
+    assign_unknown!, tensor_view, εV, assign_restriction!, BoundaryDataRestriction, HomogeneousBoundaryData,
+    CoupledDofsRestriction, grad, HomogeneousData
 using ExtendableGrids: ExtendableGrid, num_cellregions, dim_space
 import ForwardDiff
 using LinearAlgebra: mul!
@@ -44,6 +44,8 @@ export Device
 include("linear_elasticity_problem.jl")
 export create_linear_elasticity_problem
 
+include("electrostatic_problem.jl")
+export create_electrostatic_problem
 
 include("helper_functions.jl")
 export compute_lattice_mismatch

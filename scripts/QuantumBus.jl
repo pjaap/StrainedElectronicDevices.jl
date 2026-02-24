@@ -128,7 +128,7 @@ function simulate(;
 
     # lift the grid coordinates to nm (otherwise the cell volumes become to numerically zero)
     # and remove cached values from the grid (void losing integrity of the grid)
-    xgrid[Coordinates] *= 1.0e9
+    xgrid[Coordinates] *= grid_scaling
     trim!(xgrid)
     @info "grid is ready"
 
@@ -137,40 +137,73 @@ function simulate(;
     @info "done partitioning the grid into $npart parts with partitions per color = $(num_partitions_per_color(xgrid))"
 
     # create the electronic device
-    device = Device(xgrid, materials; pre_stress)
+    device = Device(xgrid, materials; pre_stress, grid_scaling)
 
-    # create the linear elasticity problem
-    elasticity_problem = create_linear_elasticity_problem(
+    # # create the linear elasticity problem
+    # elasticity_problem = create_linear_elasticity_problem(
+    #     device;
+    #     dirichlet_boundary = [boundary_region_bottom => 0.0],
+    #     periodic_coupling = periodic ? [boundary_region_left => boundary_region_right] : []
+    # )
+
+
+    # # second order finite element space
+    # if order == 1
+    #     FES = FESpace{H1P1{3}}(xgrid) # only for local testing
+    # elseif order == 2
+    #     FES = FESpace{H1P2{3, 3}}(xgrid)
+    # else
+    #     error("supported FE orders are 1 and 2.")
+    # end
+
+    electrostatic_problem = create_electrostatic_problem(
         device;
-        dirichlet_boundary = [boundary_region_bottom => 0.0],
+        dirichlet_regions = [
+            cell_region_TiN_clav1 => 0.0,
+            cell_region_TiN_clav2 => 0.0,
+            cell_region_TiN_clav3 => 0.0,
+            cell_region_TiN_clav4 => 0.0,
+            cell_region_TiN_side1 => 1.0,
+            cell_region_TiN_side2 => 0.0
+        ],
         periodic_coupling = periodic ? [boundary_region_left => boundary_region_right] : []
     )
 
     # second order finite element space
     if order == 1
-        FES = FESpace{H1P1{3}}(xgrid) # only for local testing
+        FES = FESpace{H1P1{1}}(xgrid) # only for local testing
     elseif order == 2
-        FES = FESpace{H1P2{3, 3}}(xgrid)
+        FES = FESpace{H1P2{1, 3}}(xgrid)
     else
         error("supported FE orders are 1 and 2.")
     end
 
-    dense_diag = Diagonal ∘ Vector ∘ diag
-    # LLDL(A) = lldl((A + A') / 2, memory = 100)
-    SCPC = FullSchurComplementPreconBuilder(FES.ndofs, ilu0, verbosity = 2)
-    # SCPC = SchurComplementPreconBuilder(FES.ndofs, LLDL, verbosity = 2)
+    # if use_P1_init
+    #     @assert order == 2
+    #     sol_P1, _ = simulate(; TiN_mode, grid_variant, σ_0, Plotter = nothing, periodic, use_P1_init = false, order = 1)
+    #     sol_init = FEVector(FES, tags = elasticity_problem.unknowns)
+    #     lazy_interpolate!(sol_init[1], sol_P1)
+    # else
+    #     sol_init = nothing
+    #     linear_solver = nothing # use whatever is the default
+    # end
+
+    # FSCPC = FullSchurComplementPreconBuilder(FES.ndofs, ilu0, verbosity = 2)
+    # FSCPC = AugmentedLagrangianPreconditionerBuilder(FES.ndofs, AMGPrecon, γ = 1e3, verbosity = 2)
+    # SCPC = SchurComplementPreconBuilder(FES.ndofs, ilu0, verbosity = 2)
+    # linear_solver = KrylovJL_MINRES(atol = 0.0, rtol = 1.0e-15, verbose = 1, precs = (A, p) -> (SCPC(A), I))
 
     #solve
     sol, SC = ExtendableFEM.solve(
-        elasticity_problem,
+        electrostatic_problem,
         FES;
         return_config = true,
         parallel = true,
+        # init = sol_init,
         verbosity = 2,
-        method_linear = KrylovJL_GMRES(rtol = 1.0e-15, verbose = 1, precs = (A, p) -> (SCPC(A), I))
+        method_linear = nothing,
     )
-    return SC
-    # return sol, device
+    return sol, device
 end
 
 

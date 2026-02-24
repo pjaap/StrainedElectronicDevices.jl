@@ -6,10 +6,11 @@ abstract type AbstractMaterial end
     Dummy for a non existent material for unused cell regions.
 """
 struct NoMaterial <: AbstractMaterial
-    # we need a dummy material tensor
+    # we need a dummy parameters
     C::SMatrix{6, 6}
+    ε_r::Float64
 end
-NoMaterial() = NoMaterial(@SArray zeros(6, 6))
+NoMaterial() = NoMaterial((@SArray zeros(6, 6)), 0.0)
 const no_material = NoMaterial()
 
 """
