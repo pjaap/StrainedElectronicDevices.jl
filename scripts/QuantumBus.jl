@@ -8,19 +8,19 @@ using ExtendableGrids
 using ExtendableSparse
 using GridVisualize
 using JLD2: load, save
-using LinearAlgebra: I, Diagonal, lu, diag
+using LinearAlgebra: I, Diagonal, lu, diag, Symmetric
 using SparseArrays: sparse
 using Metis
-# using PythonCall
 
 # the default linear solver
 using Pardiso
 using Krylov
 using AMGCLWrap: AMGSolverAlgorithm, AMGPrecon
-using LinearSolve: PardisoJL, KrylovJL_GMRES, KrylovJL_CG, KrylovJL_MINRES
+using LinearSolve
 
 
 using ILUZero: ilu0
+using LimitedLDLFactorizations: lldl
 
 const dim = 3
 
@@ -96,18 +96,68 @@ function process_grid!(xgrid)
 end
 
 
+function simulate_electrostatic(electrostatic_problem, xgrid; order)
+
+    if order == 1
+        FES = FESpace{H1P1{1}}(xgrid) # only for local testing
+    elseif order == 2
+        FES = FESpace{H1P2{1, 3}}(xgrid)
+    else
+        error("supported FE orders are 1 and 2.")
+    end
+
+    #solve
+    sol = ExtendableFEM.solve(
+        electrostatic_problem,
+        FES;
+        parallel = true,
+        verbosity = 2,
+        method_linear = nothing,
+    )
+    return sol
+end
+
+function simulate_elasticity(elasticity_problem_problem, xgrid; order)
+
+    if order == 1
+        FES = FESpace{H1P1{3}}(xgrid)
+    elseif order == 2
+        FES = FESpace{H1P2{3, 3}}(xgrid)
+    else
+        error("supported FE orders are 1 and 2.")
+    end
+
+    # FSCPC = FullSchurComplementPreconBuilder(FES.ndofs, ilu0, verbosity = 2)
+    # FSCPC = AugmentedLagrangianPreconditionerBuilder(FES.ndofs, AMGPrecon, γ = 1e3, verbosity = 2)
+    # SCPC = SchurComplementPreconBuilder(FES.ndofs, ilu0, verbosity = 2)
+    # linear_solver = KrylovJL_MINRES(atol = 0.0, rtol = 1.0e-15, verbose = 1, precs = (A, p) -> (SCPC(A), I))
+
+
+    sol = ExtendableFEM.solve(
+        elasticity_problem_problem,
+        FES;
+        parallel = true,
+        verbosity = 2,
+        method_linear = nothing,
+    )
+
+    return sol
+end
+
 function simulate(;
         TiN_mode = :A, # choose :A or :B
         grid_variant = :coarse, # choose :coarse or :fine
         σ_0 = -2.6,
         Plotter = nothing,
         periodic = true,
-        order = 1,
+        order_displacement = 1,
+        order_electric_potential = 1,
+        grid_scaling = 1.0e9, # multiplier for the grid coordinates (default: lift from [m] to [nm])
     )
 
     materials = material_vector(16)
     materials[cell_region_Si] = Si()
-    materials[cell_region_SiGe] = SiGe(0.34)
+    materials[cell_region_SiGe] = SiGe(0.3)
     materials[cell_region_SiO₂] = SiO₂()
 
     for cell_region in vcat(cell_regions_TiN_clav, cell_regions_TiN_side)
@@ -139,86 +189,47 @@ function simulate(;
     # create the electronic device
     device = Device(xgrid, materials; pre_stress, grid_scaling)
 
-    # # create the linear elasticity problem
-    # elasticity_problem = create_linear_elasticity_problem(
-    #     device;
-    #     dirichlet_boundary = [boundary_region_bottom => 0.0],
-    #     periodic_coupling = periodic ? [boundary_region_left => boundary_region_right] : []
-    # )
-
-
-    # # second order finite element space
-    # if order == 1
-    #     FES = FESpace{H1P1{3}}(xgrid) # only for local testing
-    # elseif order == 2
-    #     FES = FESpace{H1P2{3, 3}}(xgrid)
-    # else
-    #     error("supported FE orders are 1 and 2.")
-    # end
+    # create the linear elasticity problem
+    elasticity_problem = create_linear_elasticity_problem(
+        device;
+        dirichlet_boundary = [boundary_region_bottom => 0.0],
+        periodic_coupling = periodic ? [boundary_region_left => boundary_region_right] : []
+    )
 
     electrostatic_problem = create_electrostatic_problem(
         device;
         dirichlet_regions = [
             cell_region_TiN_clav1 => 0.0,
-            cell_region_TiN_clav2 => 0.0,
+            cell_region_TiN_clav2 => 1.0,
             cell_region_TiN_clav3 => 0.0,
             cell_region_TiN_clav4 => 0.0,
-            cell_region_TiN_side1 => 1.0,
-            cell_region_TiN_side2 => 0.0
+            cell_region_TiN_side1 => 0.0,
+            cell_region_TiN_side2 => 0.0,
         ],
         periodic_coupling = periodic ? [boundary_region_left => boundary_region_right] : []
     )
 
-    # second order finite element space
-    if order == 1
-        FES = FESpace{H1P1{1}}(xgrid) # only for local testing
-    elseif order == 2
-        FES = FESpace{H1P2{1, 3}}(xgrid)
-    else
-        error("supported FE orders are 1 and 2.")
-    end
+    sol_electrostatic = simulate_electrostatic(electrostatic_problem, xgrid; order = order_electric_potential)
+    sol_elasticity = simulate_elasticity(elasticity_problem, xgrid; order = order_displacement)
 
-    # if use_P1_init
-    #     @assert order == 2
-    #     sol_P1, _ = simulate(; TiN_mode, grid_variant, σ_0, Plotter = nothing, periodic, use_P1_init = false, order = 1)
-    #     sol_init = FEVector(FES, tags = elasticity_problem.unknowns)
-    #     lazy_interpolate!(sol_init[1], sol_P1)
-    # else
-    #     sol_init = nothing
-    #     linear_solver = nothing # use whatever is the default
-    # end
-
-    # FSCPC = FullSchurComplementPreconBuilder(FES.ndofs, ilu0, verbosity = 2)
-    # FSCPC = AugmentedLagrangianPreconditionerBuilder(FES.ndofs, AMGPrecon, γ = 1e3, verbosity = 2)
-    # SCPC = SchurComplementPreconBuilder(FES.ndofs, ilu0, verbosity = 2)
-    # linear_solver = KrylovJL_MINRES(atol = 0.0, rtol = 1.0e-15, verbose = 1, precs = (A, p) -> (SCPC(A), I))
-
-    #solve
-    sol, SC = ExtendableFEM.solve(
-        electrostatic_problem,
-        FES;
-        return_config = true,
-        parallel = true,
-        # init = sol_init,
-        verbosity = 2,
-        method_linear = nothing,
-    )
-    return sol, device
+    return sol_electrostatic, sol_elasticity, device
 end
 
 
 function plot(
-        sol,
+        sol_electrostatic,
+        sol_elasticity,
         device;
-        Plotter = nothing, # include a plotter in your global environment: GLMakie, PythonPlot...
         kwargs...
     )
 
+    @show sol_electrostatic sol_elasticity device
+
     ## displacement is the first component of the solution
-    displacement = sol.tags[1]
+    displacement = sol_elasticity.tags[1]
 
     # the grid with all adjacencies removed (for discontinuous plotting)
-    xgrid = explode(sol[displacement].FES.xgrid)
+    xgrid = explode(sol_elasticity[displacement].FES.xgrid)
 
     # extract pre-strains (from pre-stress)
     pre_strain = [ (pre_stress == zeros(6) ? pre_stress : material_tensor \ pre_stress) for (material_tensor, pre_stress) in zip(device.material_tensors, device.pre_stress) ]
@@ -233,12 +244,17 @@ function plot(
     end
 
     strain_func = FEVector(FES_strain)
-    lazy_interpolate!(strain_func[1], sol, [εV(displacement, 1.0)], postprocess = add_pre_strain_kernel!, use_cellparents = true)
+    lazy_interpolate!(strain_func[1], sol_elasticity, [εV(displacement, 1.0)], postprocess = add_pre_strain_kernel!, use_cellparents = true)
 
     # create a strain FE function
     FES_displacement = FESpace{H1P1(3)}(xgrid)
     displacement_func = FEVector(FES_displacement)
-    lazy_interpolate!(displacement_func[1], sol, use_cellparents = true)
+    lazy_interpolate!(displacement_func[1], sol_elasticity, use_cellparents = true)
+
+    # interpolate the electric_potential onto the new grid
+    FES_electric_potential = FESpace{H1P1(1)}(xgrid)
+    electric_potential_func = FEVector(FES_electric_potential)
+    lazy_interpolate!(electric_potential_func[1], sol_electrostatic, use_cellparents = true)
 
     # export the nodevalues to VTK
     writeVTK(
@@ -247,11 +263,8 @@ function plot(
         compress = true,
         :displacement => nodevalues(displacement_func[1]),
         :strain => nodevalues(strain_func[1]),
+        :electric_potential => nodevalues(electric_potential_func[1])
     )
-
-    gridplot(xgrid; Plotter, yplanes = [0.00000039], scene3d = :LScene)
-
-
     return nothing
 
 end
