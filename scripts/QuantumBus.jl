@@ -112,7 +112,7 @@ function simulate_electrostatic(electrostatic_problem, xgrid; order)
         FES;
         parallel = true,
         verbosity = 2,
-        method_linear = nothing,
+        method_linear = PardisoJL(),
     )
     return sol
 end
@@ -138,7 +138,7 @@ function simulate_elasticity(elasticity_problem_problem, xgrid; order)
         FES;
         parallel = true,
         verbosity = 2,
-        method_linear = nothing,
+        method_linear = PardisoJL(),
     )
 
     return sol
@@ -222,8 +222,6 @@ function plot(
         device;
         kwargs...
     )
-
-    @show sol_electrostatic sol_elasticity device
 
     ## displacement is the first component of the solution
     displacement = sol_elasticity.tags[1]
