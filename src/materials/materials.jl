@@ -9,8 +9,9 @@ struct NoMaterial <: AbstractMaterial
     # we need a dummy parameters
     C::SMatrix{6, 6}
     ε_r::Float64
+    CTE::Float64
 end
-NoMaterial() = NoMaterial((@SArray zeros(6, 6)), 0.0)
+NoMaterial() = NoMaterial((@SArray zeros(6, 6)), 0.0, 0.0)
 const no_material = NoMaterial()
 
 """

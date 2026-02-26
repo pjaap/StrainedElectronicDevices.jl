@@ -152,25 +152,9 @@ function simulate(;
         periodic = true,
         order_displacement = 1,
         order_electric_potential = 1,
+        T_final = 0.0, # K
         grid_scaling = 1.0e9, # multiplier for the grid coordinates (default: lift from [m] to [nm])
     )
-
-    materials = material_vector(16)
-    materials[cell_region_Si] = Si()
-    materials[cell_region_SiGe] = SiGe(0.3)
-    materials[cell_region_SiO₂] = SiO₂()
-
-    for cell_region in vcat(cell_regions_TiN_clav, cell_regions_TiN_side)
-        materials[cell_region] = TiN(TiN_mode)
-    end
-
-    # in-plane (x-y) stress unit matrix in Voigt notation
-    Jᵥ = @SArray [1.0, 1.0, 0.0, 0.0, 0.0, 0.0]
-
-    # external pre-stress at the TiN claviers
-    pre_stress = [
-        cell_region => σ_0 * Jᵥ for cell_region in cell_regions_TiN_clav
-    ]
 
     ## read the grid from a file and postprocess
     xgrid = load(StrainedElectronicDevices.gridsdir("qubus_one_contact_$(grid_variant).jld2"))["grid"]
@@ -186,8 +170,37 @@ function simulate(;
     xgrid = partition(xgrid, PlainMetisPartitioning(; npart))
     @info "done partitioning the grid into $npart parts with partitions per color = $(num_partitions_per_color(xgrid))"
 
+    materials = material_vector(16)
+    materials[cell_region_Si] = Si()
+    materials[cell_region_SiGe] = SiGe(0.3)
+    materials[cell_region_SiO₂] = SiO₂()
+
+    for cell_region in vcat(cell_regions_TiN_clav, cell_regions_TiN_side)
+        materials[cell_region] = TiN(TiN_mode)
+    end
+
+    # in-plane (x-y) stress unit matrix in Voigt notation
+    Jᵥ = @SArray [1.0, 1.0, 0.0, 0.0, 0.0, 0.0]
+
+    # unit matrix in Voigt notation
+    Iᵥ = @SArray [1.0, 1.0, 1.0, 0.0, 0.0, 0.0]
+
+    # external pre-stress at the TiN gates
+    pre_stress = [
+        cell_region => σ_0 * Jᵥ for cell_region in vcat(cell_regions_TiN_clav, cell_regions_TiN_side)
+    ]
+
+    # thermal strain for each material at ≈0K
+    T_initial = 300.0 # K
+    ΔT = T_final - T_initial
+    thermal_strain = [ i => materials[i].CTE * ΔT * Iᵥ for i in eachindex(materials)]
+
+    lattice_mismatch = [
+        cell_region_Si => @SArray [0.0124, 0.0124, -0.0101, 0.0, 0.0, 0.0]
+    ]
+
     # create the electronic device
-    device = Device(xgrid, materials; pre_stress, grid_scaling)
+    device = Device(xgrid, materials; pre_stress, thermal_strain, lattice_mismatch, grid_scaling)
 
     # create the linear elasticity problem
     elasticity_problem = create_linear_elasticity_problem(
