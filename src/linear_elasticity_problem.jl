@@ -58,10 +58,6 @@ function create_linear_elasticity_problem(device::Device; dirichlet_boundary = [
 
     # add dirichlet boundary data
     for db in dirichlet_boundary
-        # assign_restriction!(
-        #     PD,
-        #     BoundaryDataRestriction(u; regions = [db.first], db.second)
-        # )
         assign_operator!(
             PD,
             HomogeneousBoundaryData(u; regions = [db.first], value = db.second)

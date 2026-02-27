@@ -17,6 +17,7 @@ using Pardiso
 using Krylov
 using AMGCLWrap: AMGSolverAlgorithm, AMGPrecon
 using LinearSolve
+using IncompleteLU
 
 
 using ILUZero: ilu0
@@ -128,9 +129,9 @@ function simulate_elasticity(elasticity_problem_problem, xgrid; order)
     end
 
     # FSCPC = FullSchurComplementPreconBuilder(FES.ndofs, ilu0, verbosity = 2)
-    # FSCPC = AugmentedLagrangianPreconditionerBuilder(FES.ndofs, AMGPrecon, γ = 1e3, verbosity = 2)
-    # SCPC = SchurComplementPreconBuilder(FES.ndofs, ilu0, verbosity = 2)
-    # linear_solver = KrylovJL_MINRES(atol = 0.0, rtol = 1.0e-15, verbose = 1, precs = (A, p) -> (SCPC(A), I))
+    # P = AugmentedLagrangianPreconditionerBuilder(FES.ndofs,  A -> ilu(A, τ = 2e1), γ = 1e3, verbosity = 2)
+    P = SchurComplementPreconBuilder(FES.ndofs, A -> ilu(A, τ = 2.0e1), verbosity = 2, flip_sign = true)
+    linear_solver = KrylovJL_MINRES(atol = 0.0, etol = 1.0e-15, rtol = 1.0e-15, verbose = 1, precs = (A, p) -> (P(A), I))
 
 
     sol = ExtendableFEM.solve(
@@ -138,7 +139,7 @@ function simulate_elasticity(elasticity_problem_problem, xgrid; order)
         FES;
         parallel = true,
         verbosity = 2,
-        method_linear = PardisoJL(),
+        method_linear = linear_solver
     )
 
     return sol
