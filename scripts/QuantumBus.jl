@@ -145,6 +145,8 @@ function simulate_elasticity(elasticity_problem_problem, xgrid; order)
 end
 
 function simulate(;
+        solve_u = true,
+        solve_phi = true,
         TiN_mode = :A, # choose :A or :B
         grid_variant = :coarse, # choose :coarse or :fine
         σ_0 = -2.6,
@@ -222,8 +224,8 @@ function simulate(;
         periodic_coupling = periodic ? [boundary_region_left => boundary_region_right] : []
     )
 
-    sol_electrostatic = simulate_electrostatic(electrostatic_problem, xgrid; order = order_electric_potential)
-    sol_elasticity = simulate_elasticity(elasticity_problem, xgrid; order = order_displacement)
+    sol_electrostatic = solve_phi ? simulate_electrostatic(electrostatic_problem, xgrid; order = order_electric_potential) : nothing
+    sol_elasticity = solve_u ? simulate_elasticity(elasticity_problem, xgrid; order = order_displacement) : nothing
 
     return sol_electrostatic, sol_elasticity, device
 end
@@ -233,49 +235,73 @@ function plot(
         sol_electrostatic,
         sol_elasticity,
         device;
+        solve_u = true,
+        solve_phi = true,
         kwargs...
     )
 
-    ## displacement is the first component of the solution
-    displacement = sol_elasticity.tags[1]
+    if solve_u
+        ## displacement is the first component of the solution
+        displacement = sol_elasticity.tags[1]
 
-    # the grid with all adjacencies removed (for discontinuous plotting)
-    xgrid = explode(sol_elasticity[displacement].FES.xgrid)
+        # the grid with all adjacencies removed (for discontinuous plotting)
+        xgrid = explode(sol_elasticity[displacement].FES.xgrid)
 
-    # extract pre-strains (from pre-stress)
-    pre_strain = [ (pre_stress == zeros(6) ? pre_stress : material_tensor \ pre_stress) for (material_tensor, pre_stress) in zip(device.material_tensors, device.pre_stress) ]
+        # extract pre-strains (from pre-stress)
+        pre_strain = [ (pre_stress == zeros(6) ? pre_stress : material_tensor \ pre_stress) for (material_tensor, pre_stress) in zip(device.material_tensors, device.pre_stress) ]
 
-    # create a strain FE function
-    FES_strain = FESpace{H1P1(6)}(xgrid)
+        # create a strain FE function
+        FES_strain = FESpace{H1P1(6)}(xgrid)
 
-    # post process interpolator
-    function add_pre_strain_kernel!(result, input, qpinfo)
-        @. result = input + pre_strain[qpinfo.region]
-        return nothing
+        # post process interpolator
+        function add_pre_strain_kernel!(result, input, qpinfo)
+            @. result = input + pre_strain[qpinfo.region]
+            return nothing
+        end
+
+        strain_func = FEVector(FES_strain)
+        lazy_interpolate!(strain_func[1], sol_elasticity, [εV(displacement, 1.0)], postprocess = add_pre_strain_kernel!, use_cellparents = true)
+
+        # create a strain FE function
+        FES_displacement = FESpace{H1P1(3)}(xgrid)
+        displacement_func = FEVector(FES_displacement)
+        lazy_interpolate!(displacement_func[1], sol_elasticity, use_cellparents = true)
+
+        # export the nodevalues to VTK
+        writeVTK(
+            "QuantumBus_displacement.vtu",
+            xgrid;
+            compress = true,
+            :displacement => nodevalues(displacement_func[1]),
+            :strain => nodevalues(strain_func[1]),
+        )
+
     end
 
-    strain_func = FEVector(FES_strain)
-    lazy_interpolate!(strain_func[1], sol_elasticity, [εV(displacement, 1.0)], postprocess = add_pre_strain_kernel!, use_cellparents = true)
+    if solve_phi
 
-    # create a strain FE function
-    FES_displacement = FESpace{H1P1(3)}(xgrid)
-    displacement_func = FEVector(FES_displacement)
-    lazy_interpolate!(displacement_func[1], sol_elasticity, use_cellparents = true)
+        FES = sol_electrostatic[1].FES
+        xgrid = FES.xgrid
 
-    # interpolate the electric_potential onto the new grid
-    FES_electric_potential = FESpace{H1P1(1)}(xgrid)
-    electric_potential_func = FEVector(FES_electric_potential)
-    lazy_interpolate!(electric_potential_func[1], sol_electrostatic, use_cellparents = true)
+        if FES.ndofs > num_nodes(xgrid) # order = 2
+            xgrid = uniform_refine(xgrid)
+            FES_electric_potential = FESpace{H1P1(1)}(xgrid)
+            electric_potential_func = FEVector(FES_electric_potential)
+            lazy_interpolate!(electric_potential_func[1], sol_electrostatic, use_cellparents = true)
+        else
+            electric_potential_func = sol_electrostatic
+        end
 
-    # export the nodevalues to VTK
-    writeVTK(
-        "QuantumBusResult.vtu",
-        xgrid;
-        compress = true,
-        :displacement => nodevalues(displacement_func[1]),
-        :strain => nodevalues(strain_func[1]),
-        :electric_potential => nodevalues(electric_potential_func[1])
-    )
+        # export the nodevalues to VTK
+        writeVTK(
+            "QuantumBus_electric_potential.vtu",
+            sol_electrostatic[1].FES.xgrid;
+            compress = true,
+            :electric_potential => nodevalues(electric_potential_func[1])
+        )
+
+
+    end
     return nothing
 
 end
