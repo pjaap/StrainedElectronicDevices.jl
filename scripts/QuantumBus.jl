@@ -12,6 +12,8 @@ using LinearAlgebra: I, Diagonal, lu, diag, Symmetric
 using SparseArrays: sparse
 using Metis
 
+import UnicodePlots, Term
+
 # the default linear solver
 using Pardiso
 using Krylov
@@ -21,7 +23,6 @@ using IncompleteLU
 
 
 using ILUZero: ilu0
-using LimitedLDLFactorizations: lldl
 
 const dim = 3
 
@@ -128,11 +129,7 @@ function simulate_elasticity(elasticity_problem_problem, xgrid; order)
         error("supported FE orders are 1 and 2.")
     end
 
-    # FSCPC = FullSchurComplementPreconBuilder(FES.ndofs, ilu0, verbosity = 2)
-    # P = AugmentedLagrangianPreconditionerBuilder(FES.ndofs,  A -> ilu(A, τ = 2e1), γ = 1e3, verbosity = 2)
-    P = SchurComplementPreconBuilder(FES.ndofs, A -> ilu(A, τ = 2.0e1), verbosity = 2, flip_sign = true)
-    linear_solver = KrylovJL_MINRES(atol = 0.0, etol = 1.0e-15, rtol = 1.0e-15, verbose = 1, precs = (A, p) -> (P(A), I))
-
+    linear_solver = KrylovJL_MINRES(atol = 0.0, etol = 1.0e-15, rtol = 1.0e-15, verbose = 1, precs = RestrictedBlockPreconBuilder(blocks = 12, verbosity = 2, stabilizer = 1.0e-3))
 
     sol = ExtendableFEM.solve(
         elasticity_problem_problem,
@@ -262,6 +259,16 @@ function plot(
 
         strain_func = FEVector(FES_strain)
         lazy_interpolate!(strain_func[1], sol_elasticity, [εV(displacement, 1.0)], postprocess = add_pre_strain_kernel!, use_cellparents = true)
+
+        vis = GridVisualizer(Plotter = UnicodePlots, size = (600, 400), layout = (2, 3), show = false)
+        strain_vals = nodevalues(strain_func[1])
+        @views scalarplot!(vis[1, 1], xgrid, strain_vals[1, :], title = "ε₁₁", slice = :z => 1003.5)
+        @views scalarplot!(vis[1, 2], xgrid, strain_vals[2, :], title = "ε₂₂", slice = :z => 1003.5)
+        @views scalarplot!(vis[1, 3], xgrid, strain_vals[3, :], title = "ε₃₃", slice = :z => 1003.5)
+        @views scalarplot!(vis[2, 1], xgrid, strain_vals[4, :], title = "ε₂₃", slice = :z => 1003.5)
+        @views scalarplot!(vis[2, 2], xgrid, strain_vals[5, :], title = "ε₁₃", slice = :z => 1003.5)
+        @views scalarplot!(vis[2, 3], xgrid, strain_vals[6, :], title = "ε₁₂", slice = :z => 1003.5)
+        reveal(vis)
 
         # create a strain FE function
         FES_displacement = FESpace{H1P1(3)}(xgrid)

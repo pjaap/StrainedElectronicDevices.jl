@@ -6,12 +6,13 @@ using ExtendableFEM: ExtendableFEM, BilinearOperator, LinearOperator,
     CoupledDofsRestriction, grad, HomogeneousData
 using ExtendableGrids: ExtendableGrid, num_cellregions, dim_space
 import ForwardDiff
-using LinearAlgebra: mul!
+using LinearAlgebra: LinearAlgebra, mul!, diag
 using StaticArrays: @SArray, SMatrix, SVector
 using SimplexGridFactory: SimplexGridFactory, SimplexGridBuilder, cellregion!,
     facet!, facetregion!, maxvolume!, point!, regionpoint!, simplexgrid
 using TetGen: TetGen
-
+using SparseArrays: findnz
+using ChunkSplitters: chunks
 
 gridsdir(args...) = joinpath(pkgdir(StrainedElectronicDevices), "src", "grids", args...)
 scriptsdir(args...) = joinpath(pkgdir(StrainedElectronicDevices), "scripts", args...)
@@ -53,5 +54,7 @@ export z_rotation_matrix
 export y_rotation_matrix
 export rotate_crystal_structure
 
+include("block_precon.jl")
+export RestrictedBlockPreconBuilder
 
 end # module
