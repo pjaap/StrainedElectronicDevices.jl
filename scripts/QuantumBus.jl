@@ -17,9 +17,7 @@ import UnicodePlots, Term
 # the default linear solver
 using Pardiso
 using Krylov
-using AMGCLWrap: AMGSolverAlgorithm, AMGPrecon
 using LinearSolve
-using IncompleteLU
 
 
 using ILUZero: ilu0

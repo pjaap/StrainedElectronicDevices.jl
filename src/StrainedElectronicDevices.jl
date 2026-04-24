@@ -2,7 +2,7 @@ module StrainedElectronicDevices
 
 using ExtendableFEM: ExtendableFEM, BilinearOperator, LinearOperator,
     ProblemDescription, TDVector, Unknown, assign_operator!,
-    assign_unknown!, tensor_view, εV, assign_restriction!, BoundaryDataRestriction, HomogeneousBoundaryData,
+    assign_unknown!, tensor_view, εV, assign_restriction!, HomogeneousBoundaryData,
     CoupledDofsRestriction, grad, HomogeneousData
 using ExtendableGrids: ExtendableGrid, num_cellregions, dim_space
 import ForwardDiff
