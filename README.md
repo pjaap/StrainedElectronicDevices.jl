@@ -10,6 +10,7 @@ StrainedElectronicDevices.jl enables modeling and simulation of semiconductor de
 - Compute elastic deformations under applied pre-stress and thermal effects
 - Solve electrostatic problems in the presence of strain
 - Handle coupled elasticity and electrostatics problems in single, unified simulations
+- apply periodic boundary conditions, even for unstructued grids
 
 ## Showcase Example: QuantumBus Device
 
