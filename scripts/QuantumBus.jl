@@ -146,7 +146,6 @@ function simulate(;
         TiN_mode = :A, # choose :A or :B
         grid_variant = :coarse, # choose :coarse or :fine
         σ_0 = -2.6,
-        Plotter = nothing,
         periodic = true,
         order_displacement = 1,
         order_electric_potential = 1,
@@ -258,7 +257,7 @@ function plot(
         strain_func = FEVector(FES_strain)
         lazy_interpolate!(strain_func[1], sol_elasticity, [εV(displacement, 1.0)], postprocess = add_pre_strain_kernel!, use_cellparents = true)
 
-        vis = GridVisualizer(Plotter = UnicodePlots, size = (600, 400), layout = (2, 3), show = false)
+        vis = GridVisualizer(Plotter = UnicodePlots, size = (1500, 1200), layout = (2, 3), show = false)
         strain_vals = nodevalues(strain_func[1])
         @views scalarplot!(vis[1, 1], xgrid, strain_vals[1, :], title = "ε₁₁", slice = :z => 1003.5)
         @views scalarplot!(vis[1, 2], xgrid, strain_vals[2, :], title = "ε₂₂", slice = :z => 1003.5)
