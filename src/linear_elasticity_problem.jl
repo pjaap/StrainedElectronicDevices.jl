@@ -53,14 +53,14 @@ function create_linear_elasticity_problem(device::Device; dirichlet_boundary = [
     u = Unknown("displacement")
     assign_unknown!(PD, u)
 
-    assign_operator!(PD, BilinearOperator(bilinear_kernel!, [εV(u, 1.0)]))
-    assign_operator!(PD, LinearOperator(linear_kernel!, [εV(u, 1.0)]))
+    assign_operator!(PD, BilinearOperator(bilinear_kernel!, [εV(u, 1.0)], parallel = true))
+    assign_operator!(PD, LinearOperator(linear_kernel!, [εV(u, 1.0)], parallel = true))
 
     # add dirichlet boundary data
     for db in dirichlet_boundary
-        assign_restriction!(
+        assign_operator!(
             PD,
-            BoundaryDataRestriction(u; regions = [db.first], db.second)
+            HomogeneousBoundaryData(u; regions = [db.first], value = db.second)
         )
     end
 

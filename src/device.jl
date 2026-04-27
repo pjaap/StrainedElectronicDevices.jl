@@ -5,6 +5,8 @@ struct Device{Tc, Ti}
     pre_stress::Vector{SVector{6}}
 
     material_tensors::Vector{SMatrix{6, 6}}
+
+    dielectric_permittivity::Vector{Float64}
 end
 
 
@@ -39,7 +41,8 @@ function Device(
         thermal_strain = [],
         pre_stress = [],
         pre_strain = [],
-        lattice_mismatch = []
+        lattice_mismatch = [],
+        grid_scaling = 1.0
     ) where {Tc, Ti}
 
     cell_regions = num_cellregions(grid)
@@ -71,5 +74,8 @@ function Device(
         ps[k] += mt[k] * v
     end
 
-    return Device{Tc, Ti}(grid, ps, mt)
+    ε_0	= 8.854187817620389e-12
+    dielectric_permittivity = [ material.ε_r * ε_0 * grid_scaling for material in materials ]
+
+    return Device{Tc, Ti}(grid, ps, mt, dielectric_permittivity)
 end

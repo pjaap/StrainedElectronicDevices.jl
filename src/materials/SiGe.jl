@@ -7,6 +7,7 @@ struct SiGe <: AbstractMaterial
     a::Float64
     c::Float64
     CTE::Float64
+    ε_r::Float64
 end
 
 
@@ -38,7 +39,8 @@ function SiGe(x)
         matrix,
         (5.431 + 0.2x + 0.027x^2),
         (5.431 + 0.2x + 0.027x^2),
-        (1 - x) * CTE_Si + x * CTE_Ge
+        (1 - x) * CTE_Si + x * CTE_Ge,
+        11.7 + 4.5x
     )
 end
 

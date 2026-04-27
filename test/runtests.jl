@@ -21,3 +21,8 @@ using Test
         @test ExplicitImports.check_no_stale_explicit_imports(StrainedElectronicDevices) === nothing
     end
 end
+
+@testset "Quantum Bus example" begin
+    include(StrainedElectronicDevices.scriptsdir("QuantumBus.jl"))
+    @test QuantumBus.main() !== nothing
+end

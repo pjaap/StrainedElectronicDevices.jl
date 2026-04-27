@@ -2,16 +2,17 @@ module StrainedElectronicDevices
 
 using ExtendableFEM: ExtendableFEM, BilinearOperator, LinearOperator,
     ProblemDescription, TDVector, Unknown, assign_operator!,
-    assign_unknown!, tensor_view, εV, assign_restriction!, BoundaryDataRestriction,
-    CoupledDofsRestriction
+    assign_unknown!, tensor_view, εV, assign_restriction!, HomogeneousBoundaryData,
+    CoupledDofsRestriction, grad, HomogeneousData
 using ExtendableGrids: ExtendableGrid, num_cellregions, dim_space
 import ForwardDiff
-using LinearAlgebra: mul!
+using LinearAlgebra: LinearAlgebra, mul!, diag
 using StaticArrays: @SArray, SMatrix, SVector
 using SimplexGridFactory: SimplexGridFactory, SimplexGridBuilder, cellregion!,
     facet!, facetregion!, maxvolume!, point!, regionpoint!, simplexgrid
 using TetGen: TetGen
-
+using SparseArrays: findnz
+using ChunkSplitters: chunks
 
 gridsdir(args...) = joinpath(pkgdir(StrainedElectronicDevices), "src", "grids", args...)
 scriptsdir(args...) = joinpath(pkgdir(StrainedElectronicDevices), "scripts", args...)
@@ -44,6 +45,8 @@ export Device
 include("linear_elasticity_problem.jl")
 export create_linear_elasticity_problem
 
+include("electrostatic_problem.jl")
+export create_electrostatic_problem
 
 include("helper_functions.jl")
 export compute_lattice_mismatch
@@ -51,5 +54,7 @@ export z_rotation_matrix
 export y_rotation_matrix
 export rotate_crystal_structure
 
+include("block_precon.jl")
+export RestrictedBlockPreconBuilder
 
 end # module

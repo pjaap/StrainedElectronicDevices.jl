@@ -1,6 +1,8 @@
 struct SiO₂ <: AbstractMaterial
     name::String
     C::SMatrix{6, 6}
+    ε_r::Float64
+    CTE::Float64
 end
 
 
@@ -32,7 +34,14 @@ function SiO₂()
         0   0   0   0   0   C44
     ]
 
-    return SiO₂("SiO₂", matrix)
+    CTE = 6.5e-7 # https://www.azom.com/properties.aspx?ArticleID=1114
+
+    return SiO₂(
+        "SiO₂",
+        matrix,
+        3.9,
+        CTE
+    )
 end
 
 """

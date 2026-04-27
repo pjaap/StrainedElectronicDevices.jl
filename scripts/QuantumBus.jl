@@ -5,17 +5,22 @@ using StrainedElectronicDevices
 using StaticArrays
 using ExtendableFEM
 using ExtendableGrids
+using ExtendableSparse
 using GridVisualize
 using JLD2: load, save
-using LinearAlgebra: I, Diagonal
-# using PythonCall
+using LinearAlgebra: I, Diagonal, lu, diag, Symmetric
+using SparseArrays: sparse
+using Metis
+
+import UnicodePlots, Term
 
 # the default linear solver
 using Pardiso
 using Krylov
-using LinearSolve: PardisoJL, KrylovJL_GMRES
+using LinearSolve
 
-using ILUZero: ILU0Precon
+
+using ILUZero: ilu0
 
 const dim = 3
 
@@ -45,9 +50,9 @@ const cell_regions_TiN_side = [
 ]
 
 # boundary region assignments
-const boundary_region_left = 2
-const boundary_region_right = 3
-const boundary_region_bottom = 4
+const boundary_region_left = 11
+const boundary_region_right = 12
+const boundary_region_bottom = 13
 
 function process_grid!(xgrid)
 
@@ -91,17 +96,80 @@ function process_grid!(xgrid)
 end
 
 
+function simulate_electrostatic(electrostatic_problem, xgrid; order)
+
+    if order == 1
+        FES = FESpace{H1P1{1}}(xgrid) # only for local testing
+    elseif order == 2
+        FES = FESpace{H1P2{1, 3}}(xgrid)
+    else
+        error("supported FE orders are 1 and 2.")
+    end
+
+    #solve
+    sol = ExtendableFEM.solve(
+        electrostatic_problem,
+        FES;
+        parallel = true,
+        verbosity = 2,
+        method_linear = PardisoJL(),
+    )
+    return sol
+end
+
+function simulate_elasticity(elasticity_problem_problem, xgrid; order)
+
+    if order == 1
+        FES = FESpace{H1P1{3}}(xgrid)
+    elseif order == 2
+        FES = FESpace{H1P2{3, 3}}(xgrid)
+    else
+        error("supported FE orders are 1 and 2.")
+    end
+
+    linear_solver = KrylovJL_MINRES(atol = 0.0, etol = 1.0e-15, rtol = 1.0e-15, verbose = 100, precs = RestrictedBlockPreconBuilder(blocks = 12, verbosity = 2, stabilizer = 1.0e-3))
+
+    sol = ExtendableFEM.solve(
+        elasticity_problem_problem,
+        FES;
+        parallel = true,
+        verbosity = 2,
+        method_linear = linear_solver
+    )
+
+    return sol
+end
+
 function simulate(;
-        linear_solver = PardisoJL,
+        solve_u = true,
+        solve_phi = true,
         TiN_mode = :A, # choose :A or :B
         grid_variant = :coarse, # choose :coarse or :fine
         σ_0 = -2.6,
-        periodic = true
+        periodic = true,
+        order_displacement = 1,
+        order_electric_potential = 1,
+        T_final = 0.0, # K
+        grid_scaling = 1.0e9, # multiplier for the grid coordinates (default: lift from [m] to [nm])
     )
+
+    ## read the grid from a file and postprocess
+    xgrid = load(StrainedElectronicDevices.gridsdir("qubus_one_contact_$(grid_variant).jld2"))["grid"]
+    process_grid!(xgrid)
+
+    # lift the grid coordinates to nm (otherwise the cell volumes become to numerically zero)
+    # and remove cached values from the grid (void losing integrity of the grid)
+    xgrid[Coordinates] *= grid_scaling
+    trim!(xgrid)
+    @info "grid is ready"
+
+    npart = 9 * Threads.nthreads()
+    xgrid = partition(xgrid, PlainMetisPartitioning(; npart))
+    @info "done partitioning the grid into $npart parts with partitions per color = $(num_partitions_per_color(xgrid))"
 
     materials = material_vector(16)
     materials[cell_region_Si] = Si()
-    materials[cell_region_SiGe] = SiGe(0.34)
+    materials[cell_region_SiGe] = SiGe(0.3)
     materials[cell_region_SiO₂] = SiO₂()
 
     for cell_region in vcat(cell_regions_TiN_clav, cell_regions_TiN_side)
@@ -111,25 +179,25 @@ function simulate(;
     # in-plane (x-y) stress unit matrix in Voigt notation
     Jᵥ = @SArray [1.0, 1.0, 0.0, 0.0, 0.0, 0.0]
 
-    # external pre-stress at the TiN claviers
+    # unit matrix in Voigt notation
+    Iᵥ = @SArray [1.0, 1.0, 1.0, 0.0, 0.0, 0.0]
+
+    # external pre-stress at the TiN gates
     pre_stress = [
-        cell_region => σ_0 * Jᵥ for cell_region in cell_regions_TiN_clav
+        cell_region => σ_0 * Jᵥ for cell_region in vcat(cell_regions_TiN_clav, cell_regions_TiN_side)
     ]
 
-    ## read the grid from a file
-    xgrid = load(StrainedElectronicDevices.gridsdir("qubus_one_contact_$(grid_variant).jld2"))["grid"]
-    @info "grid loaded"
+    # thermal strain for each material at ≈0K
+    T_initial = 300.0 # K
+    ΔT = T_final - T_initial
+    thermal_strain = [ i => materials[i].CTE * ΔT * Iᵥ for i in eachindex(materials)]
 
-    # process the grid (add additional boundary regions)
-    process_grid!(xgrid)
-
-    # lift the grid coordinates to nm (otherwise the cell volumes become to numerically zero)
-    # and remove cached values from the grid (void losing integrity of the grid)
-    xgrid[Coordinates] *= 1.0e9
-    trim!(xgrid)
+    lattice_mismatch = [
+        cell_region_Si => @SArray [0.0124, 0.0124, -0.0101, 0.0, 0.0, 0.0]
+    ]
 
     # create the electronic device
-    device = Device(xgrid, materials; pre_stress)
+    device = Device(xgrid, materials; pre_stress, thermal_strain, lattice_mismatch, grid_scaling)
 
     # create the linear elasticity problem
     elasticity_problem = create_linear_elasticity_problem(
@@ -138,64 +206,107 @@ function simulate(;
         periodic_coupling = periodic ? [boundary_region_left => boundary_region_right] : []
     )
 
-    # second order finite element space
-    FES = FESpace{H1P2{3, 3}}(xgrid)
-
-    #solve
-    sol = ExtendableFEM.solve(
-        elasticity_problem,
-        FES;
-        method_linear = linear_solver
+    electrostatic_problem = create_electrostatic_problem(
+        device;
+        dirichlet_regions = [
+            cell_region_TiN_clav1 => 0.0,
+            cell_region_TiN_clav2 => 1.0,
+            cell_region_TiN_clav3 => 0.0,
+            cell_region_TiN_clav4 => 0.0,
+            cell_region_TiN_side1 => 0.0,
+            cell_region_TiN_side2 => 0.0,
+        ],
+        periodic_coupling = periodic ? [boundary_region_left => boundary_region_right] : []
     )
 
-    return sol, device
+    sol_electrostatic = solve_phi ? simulate_electrostatic(electrostatic_problem, xgrid; order = order_electric_potential) : nothing
+    sol_elasticity = solve_u ? simulate_elasticity(elasticity_problem, xgrid; order = order_displacement) : nothing
+
+    return sol_electrostatic, sol_elasticity, device
 end
 
 
 function plot(
-        sol,
+        sol_electrostatic,
+        sol_elasticity,
         device;
-        Plotter = nothing, # include a plotter in your global environment: GLMakie, PythonPlot...
+        solve_u = true,
+        solve_phi = true,
         kwargs...
     )
 
-    ## displacement is the first component of the solution
-    displacement = sol.tags[1]
+    if solve_u
+        ## displacement is the first component of the solution
+        displacement = sol_elasticity.tags[1]
 
-    # the grid with all adjacencies removed (for discontinuous plotting)
-    xgrid = explode(sol[displacement].FES.xgrid)
+        # the grid with all adjacencies removed (for discontinuous plotting)
+        xgrid = explode(sol_elasticity[displacement].FES.xgrid)
 
-    # extract pre-strains (from pre-stress)
-    pre_strain = [ (pre_stress == zeros(6) ? pre_stress : material_tensor \ pre_stress) for (material_tensor, pre_stress) in zip(device.material_tensors, device.pre_stress) ]
+        # extract pre-strains (from pre-stress)
+        pre_strain = [ (pre_stress == zeros(6) ? pre_stress : material_tensor \ pre_stress) for (material_tensor, pre_stress) in zip(device.material_tensors, device.pre_stress) ]
 
-    # create a strain FE function
-    FES_strain = FESpace{H1P1(6)}(xgrid)
+        # create a strain FE function
+        FES_strain = FESpace{H1P1(6)}(xgrid)
 
-    # post process interpolator
-    function add_pre_strain_kernel!(result, input, qpinfo)
-        @. result = input + pre_strain[qpinfo.region]
-        return nothing
+        # post process interpolator
+        function add_pre_strain_kernel!(result, input, qpinfo)
+            @. result = input + pre_strain[qpinfo.region]
+            return nothing
+        end
+
+        strain_func = FEVector(FES_strain)
+        lazy_interpolate!(strain_func[1], sol_elasticity, [εV(displacement, 1.0)], postprocess = add_pre_strain_kernel!, use_cellparents = true)
+
+        vis = GridVisualizer(Plotter = UnicodePlots, size = (1500, 1200), layout = (2, 3), show = false)
+        strain_vals = nodevalues(strain_func[1])
+        @views scalarplot!(vis[1, 1], xgrid, strain_vals[1, :], title = "ε₁₁", slice = :z => 1003.5)
+        @views scalarplot!(vis[1, 2], xgrid, strain_vals[2, :], title = "ε₂₂", slice = :z => 1003.5)
+        @views scalarplot!(vis[1, 3], xgrid, strain_vals[3, :], title = "ε₃₃", slice = :z => 1003.5)
+        @views scalarplot!(vis[2, 1], xgrid, strain_vals[4, :], title = "ε₂₃", slice = :z => 1003.5)
+        @views scalarplot!(vis[2, 2], xgrid, strain_vals[5, :], title = "ε₁₃", slice = :z => 1003.5)
+        @views scalarplot!(vis[2, 3], xgrid, strain_vals[6, :], title = "ε₁₂", slice = :z => 1003.5)
+        reveal(vis)
+
+        # create a strain FE function
+        FES_displacement = FESpace{H1P1(3)}(xgrid)
+        displacement_func = FEVector(FES_displacement)
+        lazy_interpolate!(displacement_func[1], sol_elasticity, use_cellparents = true)
+
+        # export the nodevalues to VTK
+        writeVTK(
+            "QuantumBus_displacement.vtu",
+            xgrid;
+            compress = true,
+            :displacement => nodevalues(displacement_func[1]),
+            :strain => nodevalues(strain_func[1]),
+        )
+
     end
 
-    strain_func = FEVector(FES_strain)
-    lazy_interpolate!(strain_func[1], sol, [εV(displacement, 1.0)], postprocess = add_pre_strain_kernel!, use_cellparents = true)
+    if solve_phi
 
-    # create a strain FE function
-    FES_displacement = FESpace{H1P1(3)}(xgrid)
-    displacement_func = FEVector(FES_displacement)
-    lazy_interpolate!(displacement_func[1], sol, use_cellparents = true)
+        FES = sol_electrostatic[1].FES
+        xgrid = FES.xgrid
 
-    # export the nodevalues to VTK
-    writeVTK(
-        "QuantumBusResult.vtu",
-        xgrid;
-        :displacement => nodevalues(displacement_func[1]),
-        :strain => nodevalues(strain_func[1]),
-    )
+        if FES.ndofs > num_nodes(xgrid) # order = 2
+            xgrid = uniform_refine(xgrid)
+            FES_electric_potential = FESpace{H1P1(1)}(xgrid)
+            electric_potential_func = FEVector(FES_electric_potential)
+            lazy_interpolate!(electric_potential_func[1], sol_electrostatic, use_cellparents = true)
+        else
+            electric_potential_func = sol_electrostatic
+        end
 
-    gridplot(xgrid; Plotter, yplanes = [0.00000039], scene3d = :LScene)
+        # export the nodevalues to VTK
+        writeVTK(
+            "QuantumBus_electric_potential.vtu",
+            sol_electrostatic[1].FES.xgrid;
+            compress = true,
+            :electric_potential => nodevalues(electric_potential_func[1])
+        )
 
 
+    end
     return nothing
 
 end
