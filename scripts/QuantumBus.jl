@@ -127,7 +127,7 @@ function simulate_elasticity(elasticity_problem_problem, xgrid; order)
         error("supported FE orders are 1 and 2.")
     end
 
-    linear_solver = KrylovJL_MINRES(atol = 0.0, etol = 1.0e-15, rtol = 1.0e-15, verbose = 1, precs = RestrictedBlockPreconBuilder(blocks = 12, verbosity = 2, stabilizer = 1.0e-3))
+    linear_solver = KrylovJL_MINRES(atol = 0.0, etol = 1.0e-15, rtol = 1.0e-15, verbose = 100, precs = RestrictedBlockPreconBuilder(blocks = 12, verbosity = 2, stabilizer = 1.0e-3))
 
     sol = ExtendableFEM.solve(
         elasticity_problem_problem,
