@@ -1,6 +1,6 @@
 # StrainedElectronicDevices.jl
 
-[![DOI](https://zenodo.org/badge/1137616226.svg)](https://doi.org/10.5281/zenodo.21415158)
+<a href="https://doi.org/10.5281/zenodo.21415158"><img src="https://zenodo.org/badge/1137616226.svg" alt="DOI"></a>
 
 A Julia package for simulating strained electronic devices with coupled electrostatic and elastic effects.
 
