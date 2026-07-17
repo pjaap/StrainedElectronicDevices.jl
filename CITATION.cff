@@ -1,0 +1,18 @@
+cff-version: 1.2.0
+message: "If you use this software, please cite it as below."
+authors:
+  - family-names: "Jaap"
+    given-names: "Patrick"
+    email: "patrick.jaap@wias-berlin.de"
+title: "StrainedElectronicDevices.jl"
+version: 1.0.0
+date-released: 2026-01-19
+url: "https://github.com/pjaap/StrainedElectronicDevices.jl"
+repository-code: "https://github.com/pjaap/StrainedElectronicDevices.jl"
+license: MIT
+keywords:
+  - "strain engineering"
+  - "electronic devices"
+  - "finite element method"
+  - "coupled simulations"
+  - "julia"
