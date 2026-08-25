@@ -74,7 +74,7 @@ function Device(
         ps[k] += mt[k] * v
     end
 
-    ε_0	= 8.854187817620389e-12
+    ε_0 = 8.854187817620389e-12
     dielectric_permittivity = [ material.ε_r * ε_0 * grid_scaling for material in materials ]
 
     return Device{Tc, Ti}(grid, ps, mt, dielectric_permittivity)
