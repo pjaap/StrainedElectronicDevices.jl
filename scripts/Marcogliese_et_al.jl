@@ -12,6 +12,10 @@ using LinearAlgebra: I, Diagonal, lu, diag, Symmetric
 using SparseArrays: sparse
 using TetGen
 using SimplexGridFactory
+using Metis
+
+using UnicodePlots
+using GLMakie
 
 # the default linear solver
 using Pardiso
@@ -25,6 +29,7 @@ const dim = 3
 const cell_region_VS = 1
 const cell_region_elec = 2
 const cell_region_stressor = 3
+const cell_region_homogen = 4
 
 # boundary region assignments
 const boundary_region_left = 5
@@ -40,16 +45,15 @@ function make_grid(;
         θ = 54.7, # angle diag wall in degrees
         d_x = 525_000.0, # height of etched hole
         t_m = 1400.0, # silicon layer thickness
-        t_e = 500.0, # 50.0, # electronic layer thickness
-        t_s = 500, # height of stressor
+        t_e = 50.0, # electronic layer thickness
+        t_s = 500.0, # height of stressor
         w_s = 5000.0, # width of stressor
         l_s = 10_000.0, # length of stressor
         d_s = 150.0, # distance between stressors
         w_r = 300_000.0, # dist to boundary
-        w_i = 20_000.0 # width/length of region of interest
+        w_i = 20_000.0, # width/length of region of interest
+        kwargs...
     )
-
-    @warn "internal hole!"
 
     @assert w_i ≥ max(2w_s + d_s, l_s) "stressor must fit into the region of interest"
 
@@ -57,7 +61,9 @@ function make_grid(;
     w_m = w_b + 2δ
 
     # heights (z axis)
-    h4 = d_x + t_m
+    h1 = 0.0 #-(d_x + t_m + t_e) # then: stressors are at level z = 0
+    h3 = h1 + d_x
+    h4 = h3 + t_m
     h5 = h4 + t_e
     h6 = h5 + t_s
 
@@ -66,30 +72,30 @@ function make_grid(;
     # outer bottom
     r1 = w_m / 2
     r2 = r1 + w_r
-    p00 = point!(builder, -r2, -r2, 0)
-    p10 = point!(builder, r2, -r2, 0)
-    p01 = point!(builder, -r2, r2, 0)
-    p11 = point!(builder, r2, r2, 0)
+    p00 = point!(builder, -r2, -r2, h1)
+    p10 = point!(builder, r2, -r2, h1)
+    p01 = point!(builder, -r2, r2, h1)
+    p11 = point!(builder, r2, r2, h1)
 
     # inner bottom
-    q00 = point!(builder, -r1, -r1, 0)
-    q10 = point!(builder, r1, -r1, 0)
-    q01 = point!(builder, -r1, r1, 0)
-    q11 = point!(builder, r1, r1, 0)
+    q00 = point!(builder, -r1, -r1, h1)
+    q10 = point!(builder, r1, -r1, h1)
+    q01 = point!(builder, -r1, r1, h1)
+    q11 = point!(builder, r1, r1, h1)
 
     # bottom corners of plate
     r3 = w_b / 2
-    r00 = point!(builder, -r3, -r3, d_x)
-    r10 = point!(builder, r3, -r3, d_x)
-    r01 = point!(builder, -r3, r3, d_x)
-    r11 = point!(builder, r3, r3, d_x)
+    r00 = point!(builder, -r3, -r3, h3)
+    r10 = point!(builder, r3, -r3, h3)
+    r01 = point!(builder, -r3, r3, h3)
+    r11 = point!(builder, r3, r3, h3)
 
     # region of interest
     r4 = w_i / 2
-    i00 = point!(builder, -r4, -r4, d_x)
-    i10 = point!(builder, r4, -r4, d_x)
-    i01 = point!(builder, -r4, r4, d_x)
-    i11 = point!(builder, r4, r4, d_x)
+    i00 = point!(builder, -r4, -r4, h3)
+    i10 = point!(builder, r4, -r4, h3)
+    i01 = point!(builder, -r4, r4, h3)
+    i11 = point!(builder, r4, r4, h3)
 
     j00 = point!(builder, -r4, -r4, h4)
     j10 = point!(builder, r4, -r4, h4)
@@ -145,7 +151,7 @@ function make_grid(;
     facet!(builder, q01, q11, r11, r01)
 
     # bottom of plate
-    # facet!(builder, i00, i10, i11, i01)
+    facet!(builder, i00, i10, i11, i01)
     facet!(builder, i00, r00, r01, i01)
     facet!(builder, i00, i10, r10, r00)
     facet!(builder, i10, i11, r11, r10)
@@ -168,19 +174,15 @@ function make_grid(;
     facetregion!(builder, boundary_region_top)
     facet!(builder, [t00, k00, k10, k11, t11, t10])
     facet!(builder, [t00, k00, k01, k11, t11, t01])
-    # facet!(builder, [k00, k10, k11, s31, s30, s20, s10, s00])
-    # facet!(builder, [k00, s00, s01, s11, s21, s31, k11, k01])
-    # facet!(builder, s10, s20, s21, s11)
+    facet!(builder, [k00, k10, k11, s31, s30, s20, s10, s00])
+    facet!(builder, [k00, s00, s01, s11, s21, s31, k11, k01])
+    facet!(builder, s10, s20, s21, s11)
 
-    # this is wrong!
-    facet!(builder, k00, k01, k11, k10)
-    # facet!(builder, j00, j01, j11, j10)
-    facet!(builder, i00, i01, i11, i10)
 
     # internal facets
     facetregion!(builder, 1)
 
-    # facet!(builder, j00, j10, j11, j01)
+    facet!(builder, j00, j01, j11, j10)
 
     facet!(builder, i00, i10, j10, j00)
     facet!(builder, i10, i11, j11, j10)
@@ -195,42 +197,40 @@ function make_grid(;
     facet!(builder, j00, j01, k01, k00)
 
     # # stressors
-    # facetregion!(builder, 8)
-    # facet!(builder, s00, s10, s11, s01)
-    # facet!(builder, s20, s30, s31, s21)
+    facetregion!(builder, 8)
+    facet!(builder, s00, s10, s11, s01)
+    facet!(builder, s20, s30, s31, s21)
 
-    # facet!(builder, s00, s10, u10, u00)
-    # facet!(builder, s10, s11, u11, u10)
-    # facet!(builder, s01, s11, u11, u01)
-    # facet!(builder, s00, s01, u01, u00)
-    # facet!(builder, u00, u10, u11, u01)
+    facet!(builder, s00, s10, u10, u00)
+    facet!(builder, s10, s11, u11, u10)
+    facet!(builder, s01, s11, u11, u01)
+    facet!(builder, s00, s01, u01, u00)
+    facet!(builder, u00, u10, u11, u01)
 
-    # facet!(builder, s20, s30, u30, u20)
-    # facet!(builder, s30, s31, u31, u30)
-    # facet!(builder, s21, s31, u31, u21)
-    # facet!(builder, s20, s21, u21, u20)
-    # facet!(builder, u20, u30, u31, u21)
+    facet!(builder, s20, s30, u30, u20)
+    facet!(builder, s30, s31, u31, u30)
+    facet!(builder, s21, s31, u31, u21)
+    facet!(builder, s20, s21, u21, u20)
+    facet!(builder, u20, u30, u31, u21)
 
     # options!(builder; radius_edge_ratio = 2)
 
-    # cell region
+    cellregion!(builder, cell_region_homogen)
+    maxvolume!(builder, Inf64)
+    regionpoint!(builder, -(r1 + r2) / 2, 0, (h1 + h3) / 2)
+
     cellregion!(builder, cell_region_VS)
     maxvolume!(builder, Inf64)
-    regionpoint!(builder, -(r1 + r2) / 2, 0, d_x / 2)
+    regionpoint!(builder, 0, 0, (h3 + h4) / 2)
 
-
-    cellregion!(builder, 4)
-    maxvolume!(builder, Inf64)
-    regionpoint!(builder, 0, 0, (d_x + h4) / 2)
-
-    cellregion!(builder, 10)
+    cellregion!(builder, cell_region_elec)
     maxvolume!(builder, Inf64)
     regionpoint!(builder, 0, 0, (h4 + h5) / 2)
 
-    # cellregion!(builder, cell_region_stressor)
-    # maxvolume!(builder, Inf64)
-    # regionpoint!(builder, r5 + w_s / 2, 0, h5 + t_s / 2)
-    # regionpoint!(builder, -r5 - w_s / 2, 0, h5 + t_s / 2)
+    cellregion!(builder, cell_region_stressor)
+    maxvolume!(builder, Inf64)
+    regionpoint!(builder, r5 + w_s / 2, 0, h5 + t_s / 2)
+    regionpoint!(builder, -r5 - w_s / 2, 0, h5 + t_s / 2)
 
 
     return simplexgrid(builder)
@@ -260,39 +260,43 @@ function simulate_elasticity(elasticity_problem_problem, xgrid; order)
 end
 
 function simulate(;
-        periodic = true,
         order_displacement = 1,
-        nref = 5,
+        nref = 0,
+        stress = 560.0,
+        kwargs...
     )
 
-    ## read the grid from a file and postprocess
-    xgrid = make_grid(nref)
+    xgrid = uniform_refine(make_grid(kwargs...), nref)
 
+    # workaround https://github.com/WIAS-PDELib/ExtendableGrids.jl/issues/136
+    z_shift = -526450.0
+    xgrid[Coordinates][3, :] .+= z_shift
 
-    materials = material_vector(2)
-    materials[cell_region_bulk] = SiGe(0.3)
-    materials[cell_region_QW] = Si()
+    npart = 9 * Threads.nthreads()
+    xgrid = partition(xgrid, PlainMetisPartitioning(; npart))
+    @info "done partitioning the grid into $npart parts with partitions per color = $(num_partitions_per_color(xgrid))"
+
+    materials = material_vector(4)
+    materials[cell_region_VS] = SiGe(0.3)
+    materials[cell_region_elec] = Al()
+    materials[cell_region_stressor] = TiN(:A)
+    materials[cell_region_homogen] = SiGe(0.5)
 
 
     # unit matrix in Voigt notation
     Iᵥ = @SArray [1.0, 1.0, 1.0, 0.0, 0.0, 0.0]
 
-    lattice_mismatch = [
-        cell_region_QW => 0.01675 * Iᵥ,
+    thermal_strain = [
+        cell_region_stressor => Iᵥ * stress,
     ]
 
     # create the electronic device
-    device = Device(xgrid, materials; lattice_mismatch)
+    device = Device(xgrid, materials; thermal_strain)
 
     # create the linear elasticity problem
     elasticity_problem = create_linear_elasticity_problem(
         device;
-        dirichlet_boundary = [boundary_region_bottom => 0.0],
-        periodic_coupling = periodic ? [
-                boundary_region_left => boundary_region_right,
-                boundary_region_front => boundary_region_back,
-                # boundary_region_top => boundary_region_bottom,
-            ] : []
+        dirichlet_boundary = [boundary_region_bottom => 0.0]
     )
 
     sol_elasticity = simulate_elasticity(elasticity_problem, xgrid; order = order_displacement)
@@ -321,7 +325,7 @@ function plot(
 
     # post process interpolator
     function add_pre_strain_kernel!(result, input, qpinfo)
-        @. result = input #+ pre_strain[qpinfo.region]
+        @. result = input + pre_strain[qpinfo.region]
         return nothing
     end
 
@@ -333,9 +337,19 @@ function plot(
     displacement_func = FEVector(FES_displacement)
     lazy_interpolate!(displacement_func[1], sol_elasticity, use_cellparents = true)
 
+    vis = GridVisualizer(Plotter = GLMakie, size = (1500, 1200), layout = (2, 3), show = false)
+    strain_vals = nodevalues(strain_func[1])
+    @views scalarplot!(vis[1, 1], xgrid, strain_vals[1, :], title = "ε₁₁", slice = :z => -10.0)
+    @views scalarplot!(vis[1, 2], xgrid, strain_vals[2, :], title = "ε₂₂", slice = :z => -10.0)
+    @views scalarplot!(vis[1, 3], xgrid, strain_vals[3, :], title = "ε₃₃", slice = :z => -10.0)
+    @views scalarplot!(vis[2, 1], xgrid, strain_vals[4, :], title = "ε₂₃", slice = :z => -10.0)
+    @views scalarplot!(vis[2, 2], xgrid, strain_vals[5, :], title = "ε₁₃", slice = :z => -10.0)
+    @views scalarplot!(vis[2, 3], xgrid, strain_vals[6, :], title = "ε₁₂", slice = :z => -10.0)
+    reveal(vis)
+
     # export the nodevalues to VTK
     writeVTK(
-        "Demo_displacement.vtu",
+        "Marcogliese_et_al.vtu",
         xgrid;
         compress = true,
         :cell_regions => xgrid[CellRegions],

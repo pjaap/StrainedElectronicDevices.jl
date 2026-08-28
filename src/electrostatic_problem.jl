@@ -1,5 +1,7 @@
 function create_electrostatic_problem(device::Device; dirichlet_regions = [], periodic_coupling = [], charge_density = x -> 0.0)
 
+    @assert all([ε ≠ 0 for ε in device.dielectric_permittivity]) "some materials do not provide a dielectric permittivity"
+
     function bilinear_kernel!(result, input, qpinfo)
 
         # the current cell region

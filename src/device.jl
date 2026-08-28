@@ -75,7 +75,7 @@ function Device(
     end
 
     ε_0 = 8.854187817620389e-12
-    dielectric_permittivity = [ material.ε_r * ε_0 * grid_scaling for material in materials ]
+    dielectric_permittivity = [ hasproperty(material, :ε_r) ? material.ε_r * ε_0 * grid_scaling : 0.0 for material in materials ]
 
     return Device{Tc, Ti}(grid, ps, mt, dielectric_permittivity)
 end
