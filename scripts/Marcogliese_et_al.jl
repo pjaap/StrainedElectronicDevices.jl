@@ -61,7 +61,7 @@ function make_grid(;
     w_m = w_b + 2δ
 
     # heights (z axis)
-    h1 = 0.0 #-(d_x + t_m + t_e) # then: stressors are at level z = 0
+    h1 = -(d_x + t_m + t_e) # then: stressors are at level z = 0
     h3 = h1 + d_x
     h4 = h3 + t_m
     h5 = h4 + t_e
@@ -180,7 +180,7 @@ function make_grid(;
 
 
     # internal facets
-    facetregion!(builder, 1)
+    facetregion!(builder, boundary_region_default)
 
     facet!(builder, j00, j01, j11, j10)
 
@@ -189,15 +189,12 @@ function make_grid(;
     facet!(builder, i01, i11, j11, j01)
     facet!(builder, i00, i01, j01, j00)
 
-    facetregion!(builder, 2)
-
     facet!(builder, j00, j10, k10, k00)
     facet!(builder, j10, j11, k11, k10)
     facet!(builder, j01, j11, k11, k01)
     facet!(builder, j00, j01, k01, k00)
 
     # # stressors
-    facetregion!(builder, 8)
     facet!(builder, s00, s10, s11, s01)
     facet!(builder, s20, s30, s31, s21)
 
@@ -262,15 +259,13 @@ end
 function simulate(;
         order_displacement = 1,
         nref = 0,
-        stress = 560.0,
+        stress_SiN = 1.0, # GPa
+        stress_elec = -0.25, # GPa
+        T_final = 0.0, # K
         kwargs...
     )
 
     xgrid = uniform_refine(make_grid(kwargs...), nref)
-
-    # workaround https://github.com/WIAS-PDELib/ExtendableGrids.jl/issues/136
-    z_shift = -526450.0
-    xgrid[Coordinates][3, :] .+= z_shift
 
     npart = 9 * Threads.nthreads()
     xgrid = partition(xgrid, PlainMetisPartitioning(; npart))
@@ -278,20 +273,30 @@ function simulate(;
 
     materials = material_vector(4)
     materials[cell_region_VS] = SiGe(0.3)
-    materials[cell_region_elec] = Al()
-    materials[cell_region_stressor] = TiN(:A)
-    materials[cell_region_homogen] = SiGe(0.5)
+    materials[cell_region_elec] = TiN_Al2O3_composite()
+    materials[cell_region_stressor] = Si₃N₄()
+    materials[cell_region_homogen] = Si()
 
 
     # unit matrix in Voigt notation
     Iᵥ = @SArray [1.0, 1.0, 1.0, 0.0, 0.0, 0.0]
 
+    # x-yuUnit matrix in Voigt notation
+    Jᵥ = @SArray [1.0, 1.0, 0.0, 0.0, 0.0, 0.0]
+
+    pre_stress = [
+        cell_region_stressor => Jᵥ * stress_SiN,
+        cell_region_elec => Jᵥ * stress_elec,
+    ]
+
+    T_initial = 300.0 # K
+    ΔT = T_final - T_initial
     thermal_strain = [
-        cell_region_stressor => Iᵥ * stress,
+        i => materials[i].CTE * ΔT * Iᵥ for i in eachindex(materials)
     ]
 
     # create the electronic device
-    device = Device(xgrid, materials; thermal_strain)
+    device = Device(xgrid, materials; thermal_strain, pre_stress)
 
     # create the linear elasticity problem
     elasticity_problem = create_linear_elasticity_problem(

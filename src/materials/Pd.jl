@@ -34,7 +34,7 @@ function Pd()
         0   0   0   0   0   C44
     ]
 
-    return Al(
+    return Pd(
         "Pd",
         matrix,
         8.86e-6 # CTE

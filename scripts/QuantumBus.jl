@@ -255,7 +255,7 @@ function plot(
         end
 
         strain_func = FEVector(FES_strain)
-        lazy_interpolate!(strain_func[1], sol_elasticity, [εV(displacement, 1.0)], postprocess = add_pre_strain_kernel!, use_cellparents = true)
+        lazy_interpolate!(strain_func[1], sol_elasticity, postprocess = add_pre_strain_kernel!, use_cellparents = true)
 
         vis = GridVisualizer(Plotter = UnicodePlots, size = (1500, 1200), layout = (2, 3), show = false)
         strain_vals = nodevalues(strain_func[1])

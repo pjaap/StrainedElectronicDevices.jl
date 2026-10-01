@@ -28,8 +28,10 @@ include("materials/AlGaN.jl")
 include("materials/Pd.jl")
 include("materials/SiGe.jl")
 include("materials/SiO2.jl")
+include("materials/Si3N4.jl")
 include("materials/TiN.jl")
-export AlGaN, GaN, AlN, Si, Ge, SiGe, SiO2, SiO₂, TiN, Al₂O₃, Al2O3, Al, Pd
+include("materials/TiN_Al2O3_composite.jl")
+export AlGaN, GaN, AlN, Ge, SiGe, SiO2, SiO₂, TiN, Al₂O₃, Al2O3, Al, Pd, Si, Si₃N₄, Si3N₄, TiN_Al2O3_composite
 
 
 include("grids/cuboid_with_QW.jl")
