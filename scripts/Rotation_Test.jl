@@ -224,13 +224,13 @@ function simulate(;
     grid_rotated = deepcopy(xgrid)
     grid_rotated[Coordinates] = rotation_matrix * grid_rotated[Coordinates]
 
-    device_default = Device(xgrid, materials; pre_stress)
-    elasticity_problem_default = create_linear_elasticity_problem(
-        device_default;
-        dirichlet_boundary = [boundary_region_bottom => 0.0],
-        periodic_coupling = [boundary_region_front => boundary_region_back]
-    )
-    sol_elasticity_default = simulate_elasticity(elasticity_problem_default, xgrid; order = order_displacement)
+    # device_default = Device(xgrid, materials; pre_stress)
+    # elasticity_problem_default = create_linear_elasticity_problem(
+    #     device_default;
+    #     dirichlet_boundary = [boundary_region_bottom => 0.0],
+    #     periodic_coupling = [boundary_region_front => boundary_region_back]
+    # )
+    # sol_elasticity_default = simulate_elasticity(elasticity_problem_default, xgrid; order = order_displacement)
 
 
     device_rotated_grid = Device(grid_rotated, materials; pre_stress)
@@ -241,37 +241,37 @@ function simulate(;
     )
     sol_elasticity_rotated_grid = simulate_elasticity(elasticity_problem_rotated_grid, grid_rotated; order = order_displacement)
 
-    return sol_elasticity_default,
-        sol_elasticity_rotated_grid,
-        device_default,
+    return sol_elasticity_rotated_grid,
         device_rotated_grid,
         rotation_matrix
 end
 
 
 function plot(
-        sol_elasticity_default,
+        # sol_elasticity_default,
         sol_elasticity_rotated_grid,
-        device_default,
+        # device_default,
         device_rotated_grid,
         rotation_matrix;
+        plot = false,
         kwargs...
     )
 
-    xgrid = sol_elasticity_default[1].FES.xgrid
+    # xgrid = sol_elasticity_default[1].FES.xgrid
     grid_rotated = sol_elasticity_rotated_grid[1].FES.xgrid
 
     # the grid with all adjacencies removed (for discontinuous plotting)
-    xgrid = explode(xgrid)
+    # xgrid = explode(xgrid)
     grid_rotated = explode(grid_rotated)
 
     # extract pre-strains (from pre-stress)
-    pre_strain1 = [ (pre_stress == zeros(6) ? pre_stress : material_tensor \ pre_stress) for (material_tensor, pre_stress) in zip(device_default.material_tensors, device_default.pre_stress) ]
+    # pre_strain1 = [ (pre_stress == zeros(6) ? pre_stress : material_tensor \ pre_stress) for (material_tensor, pre_stress) in zip(device_default.material_tensors, device_default.pre_stress) ]
     pre_strain3 = [ (pre_stress == zeros(6) ? pre_stress : material_tensor \ pre_stress) for (material_tensor, pre_stress) in zip(device_rotated_grid.material_tensors, device_rotated_grid.pre_stress) ]
 
     # create a strain FE function
-    FES_strain = FESpace{H1P1(6)}(xgrid)
+    # FES_strain = FESpace{H1P1(6)}(xgrid)
     FES_strain_rot = FESpace{H1P1(6)}(grid_rotated)
+    FES_displacement = FESpace{H1P1(3)}(grid_rotated)
 
     # post process interpolator
     function make_prestrain_kernel(pre_strain)
@@ -282,17 +282,25 @@ function plot(
         return add_pre_strain_kernel!
     end
 
-    strain_func1 = FEVector(FES_strain)
+    # create a strain FE function
+    # strain_func1 = FEVector(FES_strain)
     strain_func3 = FEVector(FES_strain_rot)
-    t1 = Threads.@spawn lazy_interpolate!(strain_func1[1], sol_elasticity_default, [εV(1, 1.0)], postprocess = make_prestrain_kernel(pre_strain1), use_cellparents = true)
+    displacement_func = FEVector(FES_displacement)
+
+
+    # t1 = Threads.@spawn lazy_interpolate!(strain_func1[1], sol_elasticity_default, [εV(1, 1.0)], postprocess = make_prestrain_kernel(pre_strain1), use_cellparents = true)
     t2 = Threads.@spawn lazy_interpolate!(strain_func3[1], sol_elasticity_rotated_grid, [εV(1, 1.0)], postprocess = make_prestrain_kernel(pre_strain3), use_cellparents = true)
-    fetch.([t1, t2])
+    t3 = Threads.@spawn lazy_interpolate!(displacement_func[1], sol_elasticity_rotated_grid, use_cellparents = true)
+    fetch.([t2, t3])
 
-    t1 = Threads.@spawn nodevalues(strain_func1[1])
+    # t1 = Threads.@spawn nodevalues(strain_func1[1])
     t2 = Threads.@spawn nodevalues(strain_func3[1])
+    t3 = Threads.@spawn nodevalues(displacement_func[1])
 
-    strain_vals1 = fetch(t1)
+
+    # strain_vals1 = fetch(t1)
     strain_vals3 = fetch(t2)
+    displacement_vals = fetch(t3)
 
     # # rotate back
     # s2v = StrainedElectronicDevices.strain2voigt
@@ -302,16 +310,36 @@ function plot(
     #     strain_vals2[:, i] = s2v(R * v2s(strain_vals2[:, i]) * R')
     # end
 
-    vis = GridVisualizer(Plotter = GLMakie, size = (1500, 1200), layout = (2, 3), show = false)
-    @views scalarplot!(vis[1, 1], xgrid, strain_vals1[1, :], title = "def: ε₁₁", slice = :y => 0.0)
-    @views scalarplot!(vis[1, 2], xgrid, strain_vals1[2, :], title = "def: ε₂₂", slice = :y => 0.0)
-    @views scalarplot!(vis[1, 3], xgrid, strain_vals1[6, :], title = "def: ε₁₂", slice = :y => 0.0)
+    if plot
+        vis = GridVisualizer(Plotter = GLMakie, size = (1500, 1200), layout = (1, 3), show = false)
+        # @views scalarplot!(vis[1, 1], xgrid, strain_vals1[1, :], title = "def: ε₁₁", slice = :y => 0.0)
+        # @views scalarplot!(vis[1, 2], xgrid, strain_vals1[2, :], title = "def: ε₂₂", slice = :y => 0.0)
+        # @views scalarplot!(vis[1, 3], xgrid, strain_vals1[6, :], title = "def: ε₁₂", slice = :y => 0.0)
 
-    @views scalarplot!(vis[2, 1], grid_rotated, strain_vals3[1, :], title = "rot. grid: ε₁₁", slice = :(x - y))
-    @views scalarplot!(vis[2, 2], grid_rotated, strain_vals3[2, :], title = "rot. grid: ε₂₂", slice = :(x - y))
-    @views scalarplot!(vis[2, 3], grid_rotated, strain_vals3[6, :], title = "rot. grid: ε₁₂", slice = :(x - y))
+        @views scalarplot!(vis[2, 1], grid_rotated, strain_vals3[1, :], title = "rot. grid: ε₁₁", slice = :(x - y))
+        @views scalarplot!(vis[2, 2], grid_rotated, strain_vals3[2, :], title = "rot. grid: ε₂₂", slice = :(x - y))
+        @views scalarplot!(vis[2, 3], grid_rotated, strain_vals3[6, :], title = "rot. grid: ε₁₂", slice = :(x - y))
+        reveal(vis)
+    end
 
-    reveal(vis)
+    # export the nodevalues to VTK
+    # HACK: use the un-rotated grid, after every data vector was computed on the rotated grid
+    xgrid = trim(deepcopy(grid_rotated))
+    xgrid[Coordinates] = rotation_matrix'xgrid[Coordinates]
+    writeVTK(
+        "Rotation_Test.vtu",
+        xgrid;
+        compress = true,
+        :cell_regions => xgrid[CellRegions],
+        :displacement => displacement_vals,
+        :strain_xx => strain_vals3[1, :],
+        :strain_yy => strain_vals3[2, :],
+        :strain_zz => strain_vals3[3, :],
+        :strain_yz => strain_vals3[4, :],
+        :strain_xz => strain_vals3[5, :],
+        :strain_xy => strain_vals3[6, :],
+    )
+
 
     return nothing
 end
