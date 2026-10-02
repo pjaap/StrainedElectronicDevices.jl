@@ -196,7 +196,7 @@ function simulate(;
         nref = 0,
         stress_SiN = 1.0, # GPa
         T_final = 0.0, # K
-        angle = 17π / 180,
+        angle = π / 4,
         kwargs...
     )
 
