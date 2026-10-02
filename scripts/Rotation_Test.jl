@@ -2,6 +2,7 @@ module Rotation_Test
 
 using StrainedElectronicDevices
 
+using LinearAlgebra
 using StaticArrays
 using ExtendableFEM
 using ExtendableGrids
@@ -44,7 +45,8 @@ function make_grid(;
         h_s = 500.0, # height of stressor
         w_s = 5_000.0, # width of stressor
         d_s = 150.0, # distance between stressors
-        max_vol = 1.0e8, # max grid element volume
+        max_vol = 1.0e5, # max grid element volume
+        fine_vol = max_vol / 1.0e4, # fine grained volume
         slice_thickness = 100.0,
         kwargs...
     )
@@ -143,9 +145,19 @@ function make_grid(;
     maxvolume!(builder, max_vol)
     regionpoint!(builder, 0, 0, (h1 + h2) / 2)
 
-
     cellregion!(builder, cell_region_stressor1)
-    maxvolume!(builder, max_vol)
+
+    x_z_center = [0.0, -40.0]
+    function unsuitable(p1, p2, p3, p4)
+        vol = abs(det([p1 - p2 p1 - p3 p1 - p4])) / 2
+        center = (p1 + p2 + p3 + p4) / 4
+        dist = norm(center[[1, 3]] - x_z_center)
+
+        desired_vol = dist > d_s ? max_vol : fine_vol
+        return vol > desired_vol
+    end
+    options!(builder; unsuitable = unsuitable)
+
     regionpoint!(builder, -r5 - w_s / 2, 0, (h2 + h3) / 2)
 
     cellregion!(builder, cell_region_stressor2)
@@ -188,7 +200,7 @@ function simulate(;
         kwargs...
     )
 
-    xgrid = uniform_refine(make_grid(kwargs...), nref)
+    xgrid = uniform_refine(make_grid(; kwargs...), nref)
 
     npart = 9 * Threads.nthreads()
     xgrid = partition(xgrid, PlainMetisPartitioning(; npart))
